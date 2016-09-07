@@ -13,6 +13,7 @@ from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
 
 
 @click.group()
+@click.option("--workflow", "workflow")
 @click.option("--configuration", "configuration", multiple=False,
               help="Location of configuration file", required=True)
 @click.option("--start", "start", default=0, multiple=False,
@@ -22,10 +23,12 @@ from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
 @click.option("--json", "json", is_flag=True,
               help="Provide JSON output formatting")
 @click.pass_context
-def cli(ctx, configuration, start, maximum, json):
+def cli(ctx, workflow, configuration, start, maximum, json):
     ctx.obj["json"] = json
     ctx.obj["start"] = start
     ctx.obj["maximum"] = maximum
+    # TODO: either put into new file
+    ctx.obj["workflow"] = workflow
     configdict = {}
     execfile(configuration, configdict)
     ctx.obj["configurations"] = configdict["configurations"][:]
