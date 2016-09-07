@@ -19,14 +19,10 @@ from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
               help="Start index of trees to consider for measurements.")
 @click.option("--maximum", "maximum", default=float("inf"), multiple=False, metavar="INTEGER",
               help="Maximum number of trees to consider for measurements.")
-@click.option("--pcount", "pcount", default=1,
-              help="Number of processes to start")
-@click.option("--hosts", "hosts", default="localhost",
-              help="List of hosts to start calculation on")
 @click.option("--json", "json", is_flag=True,
               help="Provide JSON output formatting")
 @click.pass_context
-def cli(ctx, configuration, start, maximum, pcount, hosts, json):
+def cli(ctx, configuration, start, maximum, json):
     ctx.obj["json"] = json
     ctx.obj["start"] = start
     ctx.obj["maximum"] = maximum
