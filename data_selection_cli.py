@@ -6,6 +6,7 @@ import random
 import logging
 import subprocess
 
+from assess.exceptions.exceptions import TreeInvalidatedException
 from gnmutils.exceptions import DataNotInCacheException
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -103,6 +104,8 @@ def index_tree_statistics(ctx, paths):
             try:
                 tree = tree_builder.build(filename)
             except DataNotInCacheException:
+                tree = None
+            except TreeInvalidatedException:
                 tree = None
             if tree:
                 for event in tree.event_iter():
