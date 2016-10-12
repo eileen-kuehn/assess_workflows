@@ -1,36 +1,43 @@
+from __future__ import print_function
 import os
 import json
 import click
 import logging
-import datetime
-import subprocess
 
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
 
 import assess
 from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
+from assess_workflows.generic.structure import Structure
+from assess_workflows.utils.utils import output_results, determine_version
 
 
 @click.group()
-@click.option("--workflow", "workflow")
+@click.option("--basepath", "basepath", multiple=False, required=True)
+@click.option("--workflow-name", "workflow_name", multiple=False, required=True)
+@click.option("--step", "step", default=1, multiple=False)
 @click.option("--configuration", "configuration", multiple=False,
-              help="Location of configuration file", required=True)
+              help="Location of configuration file")
 @click.option("--start", "start", default=0, multiple=False,
               help="Start index of trees to consider for measurements.")
 @click.option("--maximum", "maximum", default=float("inf"), multiple=False, metavar="INTEGER",
               help="Maximum number of trees to consider for measurements.")
 @click.option("--json", "json", is_flag=True,
               help="Provide JSON output formatting")
+@click.option("--save", "save", is_flag=True)
+@click.option("--use_input", "use_input", is_flag=True,
+              help="Use input file specified for current task.")
 @click.pass_context
-def cli(ctx, workflow, configuration, start, maximum, json):
-    ctx.obj["json"] = json
+def cli(ctx, basepath, workflow_name, step, configuration, start, maximum, json, save, use_input):
+    ctx.obj["json"] = json or save
+    ctx.obj["save"] = save
+    ctx.obj["use_input"] = use_input
     ctx.obj["start"] = start
     ctx.obj["maximum"] = maximum
-    # TODO: either put into new file
-    ctx.obj["workflow"] = workflow
+    ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
     configdict = {}
-    execfile(configuration, configdict)
+    execfile(configuration or ctx.obj["structure"].configuration_file_path(), configdict)
     ctx.obj["configurations"] = configdict["configurations"][:]
 
 
@@ -59,7 +66,47 @@ def process_as_vector(ctx, trees, representatives):
         configurations=ctx.obj["configurations"],
         event_generator=path_generator
     )
-    _output_results(results=results, format_json=ctx.obj["json"])
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess.__file__)),
+        source="%s (%s)" % (__file__, "process_as_vector")
+    )
+
+
+@click.command()
+@click.pass_context
+def batch_process_as_vector(ctx):
+    results = []
+
+    if ctx.obj.get("use_input", False):
+        def path_generator():
+            for path in value[1:]:
+                yield (path, 1)
+
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data")
+            for key, values in input_data.items():
+                for value in values:
+                    # first element is tree, second is representative
+                    results.append(_init_results())
+                    results[-1]["files"] = value[:1]
+                    results[-1]["prototypes"] = value[1:]
+                    results[-1]["results"] = _process_configurations(
+                        prototypes=_initialise_prototypes(value[:1]),
+                        configurations=ctx.obj["configurations"],
+                        event_generator=path_generator
+                    )
+                    results[-1]["key"] = key
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess.__file__)),
+        source="%s (%s)" % (__file__, "batch_process_as_vector")
+    )
 
 
 @click.command(short_help="Calculate the distance matrix for given trees.")
@@ -92,7 +139,12 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal):
         configurations=ctx.obj["configurations"],
         event_generator=path_generator
     )
-    _output_results(results=results, format_json=ctx.obj["json"])
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=os.path.dirname(assess.__file__),
+        source="%s (%s)" % (__file__, "process_as_matrix")
+    )
 
 
 def _init_results():
@@ -101,22 +153,6 @@ def _init_results():
         "prototypes": None,
         "results": []
     }
-
-
-def _output_results(results=None, format_json=False):
-    if format_json:
-        dump = {
-            "meta": {
-                "date": "%s" % datetime.datetime.now(),
-                "version": subprocess.check_output(
-                    ["git", "describe"],
-                    cwd=os.path.dirname(assess.__file__)).strip()
-            },
-            "data": results
-        }
-        print(json.dumps(dump, indent=2))
-    else:
-        print(results)
 
 
 def _process_configurations(prototypes, configurations, event_generator):
@@ -153,13 +189,14 @@ def _process_configurations(prototypes, configurations, event_generator):
                             decorator.update(result)
                         else:
                             decorator = result
-                    results.append({
-                        "algorithm": "%s" % algorithm,
-                        "signature": "%s" % signature,
-                        "event_streamer": "%s" % streamer if streamer is not None
-                        else event_streamer(csv_path=None),
-                        "decorator": decorator.descriptive_data()
-                    })
+                    if decorator:
+                        results.append({
+                            "algorithm": "%s" % algorithm,
+                            "signature": "%s" % signature,
+                            "event_streamer": "%s" % streamer if streamer is not None
+                            else event_streamer(csv_path=None),
+                            "decorator": decorator.descriptive_data()
+                        })
     return results
 
 
@@ -178,7 +215,7 @@ def _perform_calculation(tree, algorithm, decorator_def, maxlen=float("Inf")):
     decorator.wrap_algorithm(algorithm=algorithm)
     # starting a new tree not to mix former results with current
     algorithm.start_tree(maxlen=maxlen)
-    for event in tree:
+    for event in tree.event_iter():
         algorithm.add_event(event)
     algorithm.finish_tree()
     return decorator
@@ -189,7 +226,7 @@ def _get_input_files(file_paths=None, minimum=0, maxlen=float("Inf")):
     Method takes a path to a file. The file might either contain the data directly, or
     it might be a file containing paths to files with actual data.
 
-    :param file_path: Path to file to check
+    :param file_paths: Paths to files to check
     :param minimum: Index to start reading paths from
     :param maxlen: Maximum amount of trees to return
     :return: List of data file paths
@@ -232,11 +269,13 @@ def _initialise_prototypes(prototype_paths):
         prototypes.append(tree_builder.build(prototype_path))
     return prototypes
 
+
 cli.add_command(process_as_vector)
 cli.add_command(process_as_matrix)
+cli.add_command(batch_process_as_vector)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
     logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
     with ExceptionFrame():
-        cli(obj={})
+        cli(obj={}, auto_envvar_prefix='DISS')
