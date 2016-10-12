@@ -6,6 +6,7 @@ import random
 import logging
 import subprocess
 
+from gnmutils.exceptions import DataNotInCacheException
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
 
@@ -99,7 +100,10 @@ def index_tree_statistics(ctx, paths):
     results = {}
     for path in paths:
         for filename in glob.glob("%s/*/*-process.csv" % path):
-            tree = tree_builder.build(filename)
+            try:
+                tree = tree_builder.build(filename)
+            except DataNotInCacheException:
+                tree = None
             if tree:
                 for event in tree.event_iter():
                     file_dict = results.setdefault(
