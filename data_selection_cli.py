@@ -96,6 +96,35 @@ def index_data_by_number_of_events(ctx, paths):
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
 @click.pass_context
+def index_process_names(ctx, paths):
+    tree_builder = CSVTreeBuilder()
+    result_set = set()
+    for path in paths:
+        for filename in glob.glob("%s/*/*-process.csv" % path):
+            try:
+                tree = tree_builder.build(filename)
+            except DataNotInCacheException:
+                tree = None
+            except TreeInvalidatedException:
+                tree = None
+            if tree:
+                for node in tree.node_iter():
+                    try:
+                        if "(" in node.name[0]:
+                            result_set.add(node.name)
+                    except IndexError:
+                        pass
+    output_results(
+        ctx=ctx,
+        results={"process_names": [name for name in result_set]},
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_process_names")
+    )
+
+
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.pass_context
 def index_tree_statistics(ctx, paths):
     tree_builder = CSVTreeBuilder()
     results = {}
@@ -212,6 +241,7 @@ def _line_count(filename):
 cli.add_command(index_data_by_number_of_nodes)
 cli.add_command(index_data_by_number_of_traffic_events)
 cli.add_command(index_data_by_number_of_events)
+cli.add_command(index_process_names)
 cli.add_command(index_tree_statistics)
 cli.add_command(squish_index_into_ranges)
 cli.add_command(pick_samples)
