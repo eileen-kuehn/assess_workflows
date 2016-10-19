@@ -42,4 +42,7 @@ def output_results(ctx, results=None, version=None, source=None, variant=None):
             }
             print(json.dumps(dump, indent=2), file=output_channel)
         else:
+            print("# date: %s" % datetime.datetime.now(), file=output_channel)
+            print("# source: %s" % source if source else "unknown", file=output_channel)
+            print("# version: %s" % version if version else "unkown", file=output_channel)
             print(results, file=output_channel)
