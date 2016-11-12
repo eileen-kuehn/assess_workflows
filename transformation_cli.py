@@ -28,6 +28,35 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 
 @click.command()
 @click.pass_context
+def transform_matrix_to_csv(ctx):
+    if ctx.obj.get("use_input", False):
+        result = ""
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data", None)
+
+            data = input_data["results"][0]["decorator"]["normalized_matrix"]
+            maximum_index = len(data)
+            result += "%s\n" % ",".join([str(number) for number in range(1, maximum_index+1)])
+            for row_index in xrange(0, maximum_index):
+                # write first part of matrix: 0 - index
+                result += "%s" % ",".join([str(element) for element in data[row_index][0:row_index]])
+                # write second part of matrix: 1 - len(data)
+                for col_index in xrange(row_index, maximum_index):
+                    result += ",%s" % str(data[col_index][row_index])
+                result += "\n"
+        output_results(
+            ctx=ctx,
+            results=result,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "transform_matrix_to_csv")
+        )
+
+
+@click.command()
+@click.pass_context
 def transform_matrix_to_sql(ctx):
     if ctx.obj.get("use_input", False):
         result = "INSERT INTO object_distances (a, b, d) VALUES\n"
@@ -54,6 +83,7 @@ def transform_matrix_to_sql(ctx):
         )
 
 cli.add_command(transform_matrix_to_sql)
+cli.add_command(transform_matrix_to_csv)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
