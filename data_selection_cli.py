@@ -268,8 +268,9 @@ def squish_index_into_ranges(ctx, range_width):
 @click.option("--seed", "seed", type=int)
 @click.option("--repeat", "repeat", type=int, default=1)
 @click.option("--count", "count", type=int, required=True)
+@click.option("--skip_key", "skip_key", default=False)
 @click.pass_context
-def pick_samples(ctx, seed, repeat, count):
+def pick_samples(ctx, seed, repeat, count, skip_key):
     results = {}
 
     if seed is not None:
@@ -280,12 +281,20 @@ def pick_samples(ctx, seed, repeat, count):
 
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data", None)
-            for key, values in input_data.items():
-                try:
-                    for _ in xrange(repeat):
-                        results.setdefault(key, []).append(random.sample(values, count))
-                except ValueError:
-                    continue
+            working_data = input_data
+            try:
+                if skip_key:
+                    working_data = {value for values in input_data.values() for value in values}
+                for key, values in working_data.items():
+                    try:
+                        for _ in xrange(repeat):
+                            results.setdefault(key, []).append(random.sample(values, count))
+                    except ValueError:
+                        continue
+            except AttributeError:
+                key = "samples"
+                for _ in xrange(repeat):
+                    results.setdefault(key, []).append(random.sample(working_data, count))
 
     output_results(
         ctx=ctx,
