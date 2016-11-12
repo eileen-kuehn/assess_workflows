@@ -28,6 +28,33 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 
 @click.command()
 @click.pass_context
+def transform_matrix_to_adjacency_list(ctx):
+    if ctx.obj.get("use_input", False):
+        ctx.obj["json"] = True
+        result = {}
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data", None)
+            files = input_data["files"]
+            data = input_data["results"][0]["decorator"]["normalized_matrix"]
+            for row_idx, row in enumerate(data):
+                result[files[row_idx]] = {}
+                for col_idx, col in enumerate(row[0]):
+                    if col_idx == row_idx:
+                        continue
+                    result[files[row_idx]][files[col_idx]] = col
+        output_results(
+            ctx=ctx,
+            results=result,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "transform_matrix_to_adjacency_list")
+        )
+
+
+@click.command()
+@click.pass_context
 def transform_matrix_to_csv(ctx):
     if ctx.obj.get("use_input", False):
         result = ""
@@ -82,6 +109,7 @@ def transform_matrix_to_sql(ctx):
             source="%s (%s)" % (__file__, "transform_matrix_to_sql")
         )
 
+cli.add_command(transform_matrix_to_adjacency_list)
 cli.add_command(transform_matrix_to_sql)
 cli.add_command(transform_matrix_to_csv)
 
