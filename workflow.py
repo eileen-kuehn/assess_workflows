@@ -118,8 +118,16 @@ def batch_process_as_vector(ctx):
               help="Skip calculations for diagonal of matrix.")
 @click.pass_context
 def process_as_matrix(ctx, trees, skip_upper, skip_diagonal):
+    if len(trees) == 0 and ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data")
+            for value in input_data.values():
+                trees = value[0]
     results = _init_results()
     results["files"] = results["prototypes"] = trees
+
     tree_paths = _get_input_files(trees, minimum=ctx.obj["start"], maxlen=ctx.obj["maximum"])
 
     # build prototypes
