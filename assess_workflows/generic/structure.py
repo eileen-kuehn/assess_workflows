@@ -36,6 +36,11 @@ class Structure(object):
         return os.path.join(os.path.join(os.path.dirname(
             os.path.realpath(assess_workflows.__file__)), os.pardir), "transformation_cli.py")
 
+    @staticmethod
+    def clustering_cli():
+        return os.path.join(os.path.join(os.path.dirname(
+            os.path.realpath(assess_workflows.__file__)), os.pardir), "clustering_cli.py")
+
     def input_path(self, name=None):
         return os.path.join(self.workflow_path(name or self.name), "input")
 
