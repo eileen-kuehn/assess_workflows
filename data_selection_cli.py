@@ -37,6 +37,67 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
 @click.pass_context
+def index_valid_trees(ctx, paths):
+    """
+    Method walks the given paths and reads all trees that are found within. For each tree that
+    can successfully be read, it is appended to the results list. This list can be used for
+    further processing.
+
+    :param ctx: Click context
+    :param paths: The paths to scan for valid tree data
+    """
+    results = []
+    tree_builder = CSVTreeBuilder()
+    for path in paths:
+        for filename in glob.glob("%s/*/*-process.csv" % path):
+            # try to read tree
+            try:
+                tree = tree_builder.build(filename)
+                if tree is not None:
+                    results.append(filename)
+            except DataNotInCacheException:
+                pass
+            except TreeInvalidatedException:
+                pass
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_valid_trees"))
+
+
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.pass_context
+def index_data_by_uid(ctx, paths):
+    results = {}
+    tree_builder = CSVTreeBuilder()
+    for path in paths:
+        for filename in glob.glob("%s/*/*-process.csv" % path):
+            try:
+                tree = tree_builder.build(filename)
+            except DataNotInCacheException:
+                tree = None
+            except TreeInvalidatedException:
+                tree = None
+            if tree is not None:
+                uids = set()
+                for node in tree.node_iter():
+                    if node.uid not in uids:
+                        uids.add(node.uid)
+                        results.setdefault(node.uid, []).append(filename)
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_data_by_uid"))
+
+
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.pass_context
 def index_data_by_number_of_nodes(ctx, paths):
     results = {}
     for path in paths:
@@ -238,6 +299,8 @@ def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
 
+cli.add_command(index_valid_trees)
+cli.add_command(index_data_by_uid)
 cli.add_command(index_data_by_number_of_nodes)
 cli.add_command(index_data_by_number_of_traffic_events)
 cli.add_command(index_data_by_number_of_events)
