@@ -12,8 +12,11 @@ from utility.report import LVL
 from dengraph.quality.silhouette import silhouette_score
 from dengraph.quality.calinski_harabasz import calinski_harabasz_score
 from dengraph.quality.davies_bouldin import davies_bouldin_score
+from dengraph.graphs.adjacency_graph import AdjacencyGraph
+from dengraph.dengraph import DenGraphIO
 
 from assess.clustering.clustering import Clustering
+from assess.clustering.clusterdistance import ClusterDistance
 from assess.generators.gnm_importer import CSVTreeBuilder
 from assess.events.events import ProcessStartEvent, ProcessExitEvent, TrafficEvent
 
@@ -44,7 +47,74 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
 @click.option("--eta", "eta", type=int, default=5)
 @click.option("--epsilon", "epsilon", type=float, default=.1)
 @click.pass_context
-def perform_clustering(ctx, epsilon, eta):
+def perform_precalculated_clustering(ctx, eta, epsilon):
+    results = {}
+
+    if ctx.obj.get("use_input", False):
+        configuration = ctx.obj.get("configurations", None)[0]
+        signature = configuration.get("signatures", [None])[0]
+        distance = configuration.get("distances", [None])[0]
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        tree_builder = CSVTreeBuilder()
+        adjacency_dict = {}
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data", None)
+            signature_cache = {}
+            for tree_idx, tree_path in enumerate(input_data["files"]):
+                tree = tree_builder.build(tree_path)
+                tree_index = tree.to_index(
+                    signature=signature,
+                    start_support=distance.supported.get(ProcessStartEvent, False),
+                    exit_support=distance.supported.get(ProcessExitEvent, False),
+                    traffic_support=distance.supported.get(TrafficEvent, False))
+                tree_index.key = tree_path
+                signature_cache[tree_idx] = tree_index
+            data = input_data["results"][0]["decorator"]["normalized_matrix"]
+            for row_idx, row in enumerate(data):
+                adjacency_dict[signature_cache[row_idx]] = {}
+                for col_idx, col in enumerate(row[0]):
+                    if col_idx == row_idx:
+                        continue
+                    adjacency_dict[signature_cache[row_idx]][signature_cache[col_idx]] = col
+        # perform the clustering
+        clustering = DenGraphIO(
+            base_graph=AdjacencyGraph(
+                source=adjacency_dict,
+                max_distance=epsilon),
+            cluster_distance=epsilon,
+            core_neighbours=eta)
+        cluster_distance = ClusterDistance(distance=distance)
+        clustering.graph.distance = cluster_distance
+        print("---> performed clustering with eta %s and epsilon %s" % (eta, epsilon))
+        results.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
+        results.setdefault("meta", {})["eta"] = eta
+        results.setdefault("meta", {})["epsilon"] = epsilon
+        for cluster in clustering:
+            results.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
+        for noise in clustering.noise:
+            results.setdefault("noise", []).append(noise.key)
+        for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
+            try:
+                the_score = score(clustering.clusters, clustering.graph)
+            except ValueError:
+                the_score = None
+            results.setdefault("scores", {})[score.__name__] = the_score
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "perform_precalculated_clustering")
+    )
+
+
+@click.command()
+@click.option("--eta", "eta", type=int, default=5)
+@click.option("--epsilon", "epsilon", type=float, default=.1)
+@click.pass_context
+def perform_clustering(ctx, eta, epsilon):
     results = {}
 
     if ctx.obj.get("use_input", False):
@@ -92,6 +162,7 @@ def perform_clustering(ctx, epsilon, eta):
     )
 
 cli.add_command(perform_clustering)
+cli.add_command(perform_precalculated_clustering)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
