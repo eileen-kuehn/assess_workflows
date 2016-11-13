@@ -161,25 +161,25 @@ def index_data_by_number_of_events(ctx, paths):
 
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def index_process_names(ctx, paths):
-    tree_builder = CSVTreeBuilder()
+def index_process_names(ctx, paths, pcount):
+    filenames = []
     result_set = set()
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            try:
-                tree = tree_builder.build(filename)
-            except DataNotInCacheException:
-                tree = None
-            except TreeInvalidatedException:
-                tree = None
-            if tree:
-                for node in tree.node_iter():
-                    try:
-                        if "(" in node.name[0]:
-                            result_set.add(node.name)
-                    except IndexError:
-                        pass
+        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+    if pcount > 1:
+        result_list = do_multicore(
+            count=pcount,
+            target=_process_names,
+            data=filenames
+        )
+        for result in result_list:
+            result_set.union(result)
+    else:
+        for filename in filenames:
+            result_set.union(_process_names(filename))
+
     output_results(
         ctx=ctx,
         results={"process_names": [name for name in result_set]},
@@ -341,6 +341,26 @@ def _valid_tree(filename):
         pass
     except TreeInvalidatedException:
         pass
+
+
+def _process_names(filename):
+    result = set()
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filename)
+    except DataNotInCacheException:
+        tree = None
+    except TreeInvalidatedException:
+        tree = None
+    if tree is not None:
+        for node in tree.node_iter():
+            try:
+                if "(" in node.node[0]:
+                    result.add(node.name)
+            except IndexError:
+                pass
+    return result
+
 
 cli.add_command(index_valid_trees)
 cli.add_command(index_data_by_uid)
