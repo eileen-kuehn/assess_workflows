@@ -72,24 +72,26 @@ def index_valid_trees(ctx, paths, pcount):
 
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def index_data_by_uid(ctx, paths):
+def index_data_by_uid(ctx, paths, pcount):
     results = {}
-    tree_builder = CSVTreeBuilder()
+    result_list = []
+    filenames = []
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            try:
-                tree = tree_builder.build(filename)
-            except DataNotInCacheException:
-                tree = None
-            except TreeInvalidatedException:
-                tree = None
-            if tree is not None:
-                uids = set()
-                for node in tree.node_iter():
-                    if node.uid not in uids:
-                        uids.add(node.uid)
-                        results.setdefault(node.uid, []).append(filename)
+        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+    if pcount > 1:
+        result_list = do_multicore(
+            count=pcount,
+            target=_data_by_uid,
+            data=filenames
+        )
+    else:
+        for filename in filenames:
+            result_list.append(_data_by_uid(filename))
+    for result in result_list:
+        for uid in result:
+            results.setdefault(uid, []).extend(result.get(uid, []))
 
     output_results(
         ctx=ctx,
@@ -310,6 +312,23 @@ def pick_samples(ctx, seed, repeat, count, skip_key):
 def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
+
+def _data_by_uid(filename):
+    results = {}
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filename)
+    except DataNotInCacheException:
+        tree = None
+    except TreeInvalidatedException:
+        tree = None
+    if tree is not None:
+        uids = set()
+        for node in tree.node_iter():
+            if node.uid not in uids:
+                uids.add(node.uid)
+                results.setdefault(node.uid, []).append(filename)
+    return results
 
 
 def _valid_tree(filename):
