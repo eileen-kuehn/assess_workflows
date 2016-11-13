@@ -2,6 +2,7 @@ from __future__ import print_function
 import json
 import datetime
 import subprocess
+import multiprocessing
 
 from evenmoreutils.files import smart_open
 
@@ -46,3 +47,11 @@ def output_results(ctx, results=None, version=None, source=None, variant=None):
             print("# source: %s" % source if source else "unknown", file=output_channel)
             print("# version: %s" % version if version else "unkown", file=output_channel)
             print(results, file=output_channel)
+
+
+def do_multicore(count=1, target=None, data=None):
+    pool = multiprocessing.Pool(processes=count)
+    result_list = pool.map(target, data)
+    pool.close()
+    pool.join()
+    return [result for result in result_list if result is not None]
