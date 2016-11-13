@@ -1,6 +1,7 @@
 import json
 import os
 
+import time
 import click
 import logging
 
@@ -79,18 +80,21 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                         continue
                     adjacency_dict[signature_cache[row_idx]][signature_cache[col_idx]] = col
         # perform the clustering
+        start = time.time()
         clustering = DenGraphIO(
             base_graph=AdjacencyGraph(
                 source=adjacency_dict,
                 max_distance=epsilon),
             cluster_distance=epsilon,
             core_neighbours=eta)
+        end = time.time()
         cluster_distance = ClusterDistance(distance=distance)
         clustering.graph.distance = cluster_distance
         print("---> performed clustering with eta %s and epsilon %s" % (eta, epsilon))
         results.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
         results.setdefault("meta", {})["eta"] = eta
         results.setdefault("meta", {})["epsilon"] = epsilon
+        results["duration"] = end - start
         for cluster in clustering:
             results.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
         for noise in clustering.noise:
