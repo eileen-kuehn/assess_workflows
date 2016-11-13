@@ -43,16 +43,16 @@ class Structure(object):
             os.path.realpath(assess_workflows.__file__)), os.pardir), "clustering_cli.py")
 
     def input_path(self, name=None):
-        return os.path.join(self.workflow_path(name or self.name), "input")
+        return self._get_folder_path(self.workflow_path(name or self.name), "input")
 
     def final_path(self, name=None):
-        return os.path.join(self.workflow_path(name or self.name), "final")
+        return self._get_folder_path(self.workflow_path(name or self.name), "final")
 
     def intermediate_path(self, name=None):
-        return os.path.join(self.workflow_path(name or self.name), "intermediate")
+        return self._get_folder_path(self.workflow_path(name or self.name), "intermediate")
 
     def exploratory_path(self, name=None):
-        return os.path.join(self.workflow_path(name or self.name), "exploratory")
+        return self._get_folder_path(self.workflow_path(name or self.name), "exploratory")
 
     def workflow_path(self, name=None):
         return os.path.join(self.workflows_basepath, name or self.name)
@@ -79,3 +79,9 @@ class Structure(object):
     def final_file_path(self, name=None, step=None):
         return os.path.join(self.final_path(name), "%s_final_%d.json" %
                             (datetime.date.today(), step or self.step))
+
+    def _get_folder_path(self, workflow_name, folder_name):
+        folder_path = os.path.join(workflow_name, folder_name)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        return folder_path
