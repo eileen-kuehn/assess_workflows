@@ -16,7 +16,7 @@ from assess.events.events import ProcessStartEvent, ProcessExitEvent, TrafficEve
 
 import assess_workflows
 from assess_workflows.generic.structure import Structure
-from assess_workflows.utils.utils import output_results, determine_version
+from assess_workflows.utils.utils import output_results, determine_version, do_multicore
 
 
 @click.group()
@@ -36,8 +36,9 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def index_valid_trees(ctx, paths):
+def index_valid_trees(ctx, paths, pcount):
     """
     Method walks the given paths and reads all trees that are found within. For each tree that
     can successfully be read, it is appended to the results list. This list can be used for
@@ -47,18 +48,20 @@ def index_valid_trees(ctx, paths):
     :param paths: The paths to scan for valid tree data
     """
     results = []
-    tree_builder = CSVTreeBuilder()
+    filenames = []
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            # try to read tree
-            try:
-                tree = tree_builder.build(filename)
-                if tree is not None:
-                    results.append(filename)
-            except DataNotInCacheException:
-                pass
-            except TreeInvalidatedException:
-                pass
+        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+    if pcount > 1:
+        results.extend(do_multicore(
+            count=pcount,
+            target=_valid_tree,
+            data=filenames
+        ))
+    else:
+        for filename in filenames:
+            result = _valid_tree(filename)
+            if result is not None:
+                results.append(result)
 
     output_results(
         ctx=ctx,
@@ -307,6 +310,18 @@ def pick_samples(ctx, seed, repeat, count, skip_key):
 def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
+
+
+def _valid_tree(filename):
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filename)
+        if tree:
+            return filename
+    except DataNotInCacheException:
+        pass
+    except TreeInvalidatedException:
+        pass
 
 cli.add_command(index_valid_trees)
 cli.add_command(index_data_by_uid)
