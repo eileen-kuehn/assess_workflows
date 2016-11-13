@@ -97,7 +97,8 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
             results.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
         for noise in clustering.noise:
             results.setdefault("noise", []).append(noise.key)
-        for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
+        # for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
+        for score in [silhouette_score]:
             try:
                 the_score = score(clustering.clusters, clustering.graph)
             except ValueError:
