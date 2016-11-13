@@ -190,31 +190,24 @@ def index_process_names(ctx, paths, pcount):
 
 @click.command()
 @click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def index_tree_statistics(ctx, paths):
-    tree_builder = CSVTreeBuilder()
+def index_tree_statistics(ctx, paths, pcount):
+    filenames = []
     results = {}
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            try:
-                tree = tree_builder.build(filename)
-            except DataNotInCacheException:
-                tree = None
-            except TreeInvalidatedException:
-                tree = None
-            if tree:
-                for event in tree.event_iter():
-                    file_dict = results.setdefault(
-                        filename,
-                        {"process": {}, "traffic": {}, "traffic_count": {}})
-                    if isinstance(event, ProcessStartEvent) or isinstance(event, ProcessExitEvent):
-                        file_dict["process"][event.tme] = file_dict["process"].get(event.tme, 0) + 1
-                    elif isinstance(event, TrafficEvent):
-                        file_dict["traffic"][event.tme] = file_dict["traffic"].get(event.tme, 0) + 1
-                        file_dict["traffic_count"][event.tme] = file_dict["traffic_count"].get(
-                            event.tme, 0) + (event.in_cnt + event.out_cnt)
-            else:
-                print("skipping %s as it is invalid" % filename)
+        filenames.extend(glob.glob(("%s/*/*-process.csv" % path)))
+    if pcount > 1:
+        result_list = do_multicore(
+            count=pcount,
+            target=_tree_statistics,
+            data=filenames
+        )
+        for result in result_list:
+            results.update(result)
+    else:
+        for filename in filenames:
+            results.update(_tree_statistics(filename))
 
     output_results(
         ctx=ctx,
@@ -359,6 +352,28 @@ def _process_names(filename):
                     result.add(node.name)
             except IndexError:
                 pass
+    return result
+
+
+def _tree_statistics(filename):
+    result = {}
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filename)
+    except DataNotInCacheException:
+        tree = None
+    except TreeInvalidatedException:
+        tree = None
+    if tree is not None:
+        for event in tree.event_iter():
+            file_dict = result.setdefault(
+                filename, {"process": {}, "traffic": {}, "traffic_count": {}})
+            if isinstance(event, ProcessStartEvent) or isinstance(event, ProcessExitEvent):
+                file_dict["process"][event.tme] = file_dict["process"].get(event.tme, 0) + 1
+            elif isinstance(event, TrafficEvent):
+                file_dict["traffic"][event.tme] = file_dict["traffic"].get(event.tme, 0) + 1
+                file_dict["traffic_count"][event.tme] = file_dict["traffic_count"].get(
+                    event.tme, 0) + (event.in_cnt + event.out_cnt)
     return result
 
 
