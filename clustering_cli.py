@@ -82,9 +82,7 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
         # perform the clustering
         start = time.time()
         clustering = DenGraphIO(
-            base_graph=AdjacencyGraph(
-                source=adjacency_dict,
-                max_distance=epsilon),
+            base_graph=AdjacencyGraph(source=adjacency_dict),
             cluster_distance=epsilon,
             core_neighbours=eta)
         end = time.time()
