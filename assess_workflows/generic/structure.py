@@ -7,7 +7,8 @@ import assess_workflows
 class Structure(object):
     def __init__(self, basepath=None, name=None, step=1):
         self.basepath = basepath or os.environ["DISS_BASEPATH"]
-        self.workflows_basepath = os.path.join(self.basepath, "workflows")
+        self.workflows_basepath = os.path.join(self.basepath, os.environ.get(
+            "DISS_WORKFLOWFOLDER_NAME", "workflows"))
         self.name = name
         self.step = step
 
