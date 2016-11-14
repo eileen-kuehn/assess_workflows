@@ -63,6 +63,9 @@ class Structure(object):
     def execution_file_path(self, name=None):
         return os.path.join(self.workflow_path(name or self.name), "run_workflow.py")
 
+    def configuration_module(self, step=None):
+        return "configuration_%d" % (step or self.step)
+
     def configuration_file_path(self, name=None, step=None):
         return os.path.join(self.workflow_path(name or self.name),
                             "configuration_%d.py" % (step or self.step))
