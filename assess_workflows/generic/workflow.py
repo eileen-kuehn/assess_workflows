@@ -49,16 +49,18 @@ class Workflow(object):
             from_step=current_step - 1
         )
 
-    def prepare_intermediate_as_input(self):
+    def prepare_intermediate_as_input(self, from_step=None):
         """
         Convenience function that encapsulates the copy process from intermediate results from
         last step to prepare for next step.
+
+        :param from_step: The step to copy data from
         """
         current_step = len(self._tasks) + 1
         self.add_task(
             cli_path=Structure.generic_cli(),
             cmd="intermediate_as_input",
-            from_step=current_step - 1,
+            from_step=from_step or (current_step - 1),
             to_step=current_step + 1
         )
 
