@@ -74,6 +74,36 @@ def index_valid_trees(ctx, paths, pcount):
 @click.option("--paths", "paths", multiple=True, required=True)
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
+def index_data_by_tme(ctx, paths, pcount):
+    results = {}
+    result_list = []
+    filenames = []
+    for path in paths:
+        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+    if pcount > 1:
+        result_list = do_multicore(
+            count=pcount,
+            target=_data_by_tme,
+            data=filenames
+        )
+    else:
+        for filename in filenames:
+            result_list.append(_data_by_tme(filename))
+    for result in result_list:
+        for tme in result:
+            results.setdefault(tme, []).extend(result.get(tme, []))
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_data_by_tme"))
+
+
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
 def index_data_by_uid(ctx, paths, pcount):
     results = {}
     result_list = []
@@ -306,6 +336,16 @@ def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
 
+def _data_by_tme(filename):
+    results = {}
+    tree_builder = CSVTreeBuilder()
+    tree = tree_builder.build(filename)
+    if tree is not None:
+        node = next(tree.node_iter())
+        results.setdefault(node.tme, []).append(filename)
+    return results
+
+
 def _data_by_uid(filename):
     results = {}
     tree_builder = CSVTreeBuilder()
@@ -378,6 +418,7 @@ def _tree_statistics(filename):
 
 
 cli.add_command(index_valid_trees)
+cli.add_command(index_data_by_tme)
 cli.add_command(index_data_by_uid)
 cli.add_command(index_data_by_number_of_nodes)
 cli.add_command(index_data_by_number_of_traffic_events)
