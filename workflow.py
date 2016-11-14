@@ -121,8 +121,9 @@ def batch_process_as_vector(ctx):
               help="Skip calculations for upper part of matrix.")
 @click.option("--skip-diagonal", "skip_diagonal", is_flag=True,
               help="Skip calculations for diagonal of matrix.")
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def process_as_matrix(ctx, trees, skip_upper, skip_diagonal):
+def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
     if len(trees) == 0 and ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
@@ -135,29 +136,100 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal):
 
     tree_paths = _get_input_files(trees, minimum=ctx.obj["start"], maxlen=ctx.obj["maximum"])
 
-    # build prototypes
-    prototypes = _initialise_prototypes(tree_paths)
+    if pcount > 1:
+        data = []
+        # prepare blocks of data
+        block_size = len(tree_paths) / float(pcount) / 4.0
+        index_value = int(math.ceil(len(tree_paths) / block_size))
+        for row_idx in range(index_value):
+            for col_idx in range(index_value):
+                if skip_upper and col_idx > row_idx:
+                    continue
+                row_trees = tree_paths[int(row_idx * block_size):min(
+                    int((row_idx + 1) * block_size), len(tree_paths))]
+                col_trees = tree_paths[int(col_idx * block_size):min(
+                    int((col_idx + 1) * block_size), len(tree_paths))]
+                data.append({
+                    "tree_paths": row_trees,
+                    "prototype_paths": col_trees,
+                    "configurations": ctx.obj["configurations"]
+                })
 
-    def path_generator():
-        for tree_index, tree_path in enumerate(tree_paths):
-            maxlen = len(tree_paths)
-            if skip_upper and skip_diagonal:
-                maxlen = tree_index
-            elif skip_upper:
-                maxlen = tree_index + 1
-            yield (tree_path, maxlen)
+        result_list = do_multicore(
+            count=pcount,
+            target=_process_as_matrix,
+            data=data
+        )
+        finals = None
+        current_index = 0
+        while current_index < len(result_list):
+            current_objects = result_list[current_index]["results"][0]["decorator"]
+            for key in current_objects:
+                decorator = Decorator.from_name(key)
+                decorator._data = current_objects[key]
+                current_index += 1
+                for row_idx in range(1, index_value):
+                    # append the next one
+                    other = Decorator.from_name(key)
+                    other._data = result_list[current_index]["results"][0]["decorator"]["normalized_matrix"]
+                    decorator += other
+                    current_index += 1
+            if finals is None:
+                finals = result_list[0]
+            else:
+                finals["results"][0]["decorator"]["normalized_matrix"].extend(decorator._data)
+        results["results"] = finals["results"]
+    else:
+        tree_paths = tree_paths[:]
+        # build prototypes
+        prototypes = _initialise_prototypes(tree_paths)
 
-    results["results"] = _process_configurations(
-        prototypes=prototypes,
-        configurations=ctx.obj["configurations"],
-        event_generator=path_generator
-    )
+        def path_generator():
+            for tree_index, tree_path in enumerate(tree_paths):
+                maxlen = len(tree_paths)
+                if skip_upper and skip_diagonal:
+                    maxlen = tree_index
+                elif skip_upper:
+                    maxlen = tree_index + 1
+                yield (tree_path, maxlen)
+
+        results["results"] = _process_configurations(
+            prototypes=prototypes,
+            configurations=ctx.obj["configurations"],
+            event_generator=path_generator
+        )
+
     output_results(
         ctx=ctx,
         results=results,
         version=os.path.dirname(assess.__file__),
         source="%s (%s)" % (__file__, "process_as_matrix")
     )
+
+
+# TODO: add configurations
+def _process_as_matrix(args):
+    """
+    :param tree_paths:
+    :param prototype_paths:
+    :param configurations:
+    :return:
+    """
+    results = {}
+    configurations = args.get("configurations", [])
+    tree_paths = args.get("tree_paths", [])
+    prototypes = _initialise_prototypes(args.get("prototype_paths", []))
+
+    def path_generator():
+        for tree_path in tree_paths:
+            yield (tree_path, len(prototypes))
+
+    results["results"] = _process_configurations(
+        prototypes=prototypes,
+        configurations=configurations,
+        event_generator=path_generator
+    )
+    return results
 
 
 def _init_results():
