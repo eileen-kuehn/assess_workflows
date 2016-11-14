@@ -1,8 +1,11 @@
 from __future__ import print_function
 import os
+import sys
 import json
+import math
 import click
 import logging
+import importlib
 
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
@@ -10,7 +13,8 @@ from utility.exceptions import ExceptionFrame
 import assess
 from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
 from assess_workflows.generic.structure import Structure
-from assess_workflows.utils.utils import output_results, determine_version
+from assess_workflows.utils.utils import output_results, determine_version, do_multicore
+from assess.decorators.decorator import Decorator
 
 
 @click.group()
@@ -36,9 +40,10 @@ def cli(ctx, basepath, workflow_name, step, configuration, start, maximum, json,
     ctx.obj["start"] = start
     ctx.obj["maximum"] = maximum
     ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
-    configdict = {}
-    execfile(configuration or ctx.obj["structure"].configuration_file_path(), configdict)
-    ctx.obj["configurations"] = configdict["configurations"][:]
+    config_module = ctx.obj["structure"].configuration_module()
+    importlib.import_module(config_module)
+    configdict = sys.modules[config_module]
+    ctx.obj["configurations"] = configdict.configurations
 
 
 @click.command(short_help="Calculate the distance vector for given data.")
