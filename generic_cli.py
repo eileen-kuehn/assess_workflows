@@ -71,22 +71,23 @@ def create_workflow(ctx, name):
     workflow_name = "%s_%s_%s" % (datetime.date.today(), name, "workflow")
     structure = ctx.obj.get("structure", None)
     structure.name = workflow_name
-    try:
-        os.makedirs(structure.input_path())
-        os.makedirs(structure.exploratory_path())
-        os.makedirs(structure.intermediate_path())
-        os.makedirs(structure.final_path())
-        with open(structure.workflow_config_file_path(), "w") as config_file:
-            # create config object and write in json format
-            config_object = {
-                "DISS_WORKFLOW_NAME": workflow_name
-            }
-            config_file.write(json.dumps(config_object))
-        with open(structure.configuration_file_path(), "w") as configuration_file:
-            configurations = [{"algorithms": [None], "signatures": [None]}]
-            configuration_file.write("configurations = %s\n" % configurations)
-        with open(structure.execution_file_path(), "w") as run_file:
-            file_content = """#!/usr/local/bin/python
+    if not os.path.exists(structure.workflow_path()):
+        try:
+            structure.input_path()
+            structure.exploratory_path()
+            structure.intermediate_path()
+            structure.final_path()
+            with open(structure.workflow_config_file_path(), "w") as config_file:
+                # create config object and write in json format
+                config_object = {
+                    "DISS_WORKFLOW_NAME": workflow_name
+                }
+                config_file.write(json.dumps(config_object))
+            with open(structure.configuration_file_path(), "w") as configuration_file:
+                configurations = [{"algorithms": [None], "signatures": [None]}]
+                configuration_file.write("configurations = %s\n" % configurations)
+            with open(structure.execution_file_path(), "w") as run_file:
+                file_content = """#!/usr/local/bin/python
 
 import os
 import json
@@ -117,14 +118,14 @@ if __name__ == '__main__':
     with ExceptionFrame():
         start()
 """
-            run_file.write(file_content)
-        # make file executable
-        st = os.stat(structure.execution_file_path())
-        os.chmod(structure.execution_file_path(), st.st_mode | stat.S_IEXEC)
-    except OSError:
-        click.echo("The workflow has already been created before, skipping here...")
-    else:
-        click.echo("created workflow structure at %s" % structure.workflow_path(workflow_name))
+                run_file.write(file_content)
+            # make file executable
+            st = os.stat(structure.execution_file_path())
+            os.chmod(structure.execution_file_path(), st.st_mode | stat.S_IEXEC)
+        except OSError:
+            click.echo("The workflow has already been created before, skipping here...")
+        else:
+            click.echo("created workflow structure at %s" % structure.workflow_path(workflow_name))
 
 
 @click.command()
