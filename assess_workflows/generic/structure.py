@@ -13,6 +13,11 @@ class Structure(object):
         self.step = step
 
     @staticmethod
+    def analysis_cli():
+        return os.path.join(os.path.join(os.path.dirname(
+            os.path.realpath(assess_workflows.__file__)), os.pardir), "analysis_cli.py")
+
+    @staticmethod
     def workflow_cli():
         return os.path.join(os.path.join(os.path.dirname(
             os.path.realpath(assess_workflows.__file__)), os.pardir), "workflow.py")
