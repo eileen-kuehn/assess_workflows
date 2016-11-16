@@ -171,13 +171,13 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
                 for row_idx in range(1, index_value):
                     # append the next one
                     other = Decorator.from_name(key)
-                    other._data = result_list[current_index]["results"][0]["decorator"]["normalized_matrix"]
+                    other._data = result_list[current_index]["results"][0]["decorator"][key]
                     decorator += other
                     current_index += 1
             if finals is None:
                 finals = result_list[0]
             else:
-                finals["results"][0]["decorator"]["normalized_matrix"].extend(decorator._data)
+                finals["results"][0]["decorator"][key].extend(decorator._data)
         results["results"] = finals["results"]
     else:
         tree_paths = tree_paths[:]
