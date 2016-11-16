@@ -37,7 +37,7 @@ class Workflow(object):
     def add_task(self, cli_path=None, cmd=None, save=None, use_input=None, **kwargs):
         self._tasks.append(Task(cli_path=cli_path, cmd=cmd, save=save, use_input=use_input, **kwargs))
 
-    def finalise(self):
+    def finalise(self, file_type="json"):
         """
         Convenience function that encapsulates the copy process to finalise the last inermediate
         file that was created.
@@ -46,7 +46,8 @@ class Workflow(object):
         self.add_task(
             cli_path=Structure.generic_cli(),
             cmd="finalise",
-            from_step=current_step - 1
+            from_step=current_step - 1,
+            file_type=file_type
         )
 
     def prepare_intermediate_as_input(self, from_step=None):

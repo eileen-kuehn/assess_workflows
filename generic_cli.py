@@ -145,12 +145,13 @@ def intermediate_as_input(ctx, from_steps, to_steps):
 
 @click.command()
 @click.option("--from_step", "from_steps", required=True, multiple=True, type=int)
+@click.option("--file_type", "file_type", type=str, default="json")
 @click.pass_context
-def finalise(ctx, from_steps):
+def finalise(ctx, from_steps, file_type):
     structure = ctx.obj.get("structure", None)
     for from_step in from_steps:
-        file_path = structure.intermediate_file_path(step=from_step)
-        shutil.copyfile(file_path, structure.final_file_path(step=from_step))
+        file_path = structure.intermediate_file_path(step=from_step, file_type=file_type)
+        shutil.copyfile(file_path, structure.final_file_path(step=from_step, file_type=file_type))
         # TODO: maybe write protect the file?
 
 cli.add_command(create_workflow)

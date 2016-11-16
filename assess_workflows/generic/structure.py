@@ -75,18 +75,20 @@ class Structure(object):
         return os.path.join(self.workflow_path(name or self.name),
                             "configuration_%d.py" % (step or self.step))
 
-    def intermediate_file_path(self, name=None, step=None, variant=None):
+    def intermediate_file_path(self, name=None, step=None, variant=None, file_type=None):
+        if file_type is None:
+            file_type = "json"
         if variant:
-            return os.path.join(self.intermediate_path(name), "output_%d-%s.json" %
-                                (step or self.step, variant))
-        return os.path.join(self.intermediate_path(name), "output_%d.json" % (step or self.step))
+            return os.path.join(self.intermediate_path(name), "output_%d-%s.%s" %
+                                (step or self.step, variant, file_type))
+        return os.path.join(self.intermediate_path(name), "output_%d.%s" % (step or self.step, file_type))
 
     def input_file_path(self, name=None, step=None):
         return os.path.join(self.input_path(name), "input_%d.json" % (step or self.step))
 
-    def final_file_path(self, name=None, step=None):
-        return os.path.join(self.final_path(name), "%s_final_%d.json" %
-                            (datetime.date.today(), step or self.step))
+    def final_file_path(self, name=None, step=None, file_type="json"):
+        return os.path.join(self.final_path(name), "%s_final_%d.%s" %
+                            (datetime.date.today(), step or self.step, file_type))
 
     def _get_folder_path(self, workflow_name, folder_name):
         folder_path = os.path.join(workflow_name, folder_name)

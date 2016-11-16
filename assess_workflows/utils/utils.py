@@ -18,7 +18,7 @@ def determine_version(path):
     return version
 
 
-def output_results(ctx, results=None, version=None, source=None, variant=None):
+def output_results(ctx, results=None, version=None, source=None, variant=None, file_type=None):
     """
 
     :param ctx:
@@ -30,7 +30,7 @@ def output_results(ctx, results=None, version=None, source=None, variant=None):
     """
     format_json = ctx.obj.get("json", False)
     file_name = None if not ctx.obj.get("save", False) else \
-        ctx.obj.get("structure").intermediate_file_path(variant=variant)
+        ctx.obj.get("structure").intermediate_file_path(variant=variant, file_type=file_type)
     with smart_open(filename=file_name) as output_channel:
         if format_json:
             dump = {
