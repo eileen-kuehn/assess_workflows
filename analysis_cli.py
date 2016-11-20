@@ -40,7 +40,7 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
 
 @click.command()
 @click.pass_context
-def analyse_diamond_perturbation(ctx):
+def analyse_diamond_perturbations(ctx):
     results = {}
     ctx.obj["json"] = True
     if ctx.obj.get("use_input", False):
@@ -213,7 +213,7 @@ def analyse_metric(ctx):
 
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
-cli.add_command(analyse_diamond_perturbation)
+cli.add_command(analyse_diamond_perturbations)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
