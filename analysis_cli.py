@@ -40,6 +40,61 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
 
 @click.command()
 @click.pass_context
+def analyse_diamond_perturbation(ctx):
+    results = {}
+    ctx.obj["json"] = True
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        tree_builder = CSVTreeBuilder()
+        signature_builders = ctx.obj.get("configurations", [{}])[0].get("signatures", [])
+
+        with open(file_path, "r") as input_file:
+            analysis_files = json.load(input_file).get("data", None)
+            for tree_paths in analysis_files.values():
+                for tree_path in tree_paths:
+                    tree_path = tree_path[0]
+                    try:
+                        tree = tree_builder.build(tree_path)
+                    except (DataNotInCacheException, TreeInvalidatedException):
+                        tree = None
+                    if tree is not None:
+                        for signature_builder in signature_builders:
+                            diamonds = {}
+                            signature = signature_builder()
+                            for node in tree.node_iter():
+                                current_signature = signature.get_signature(node, node.parent())
+                                diamond = diamonds.setdefault(current_signature[0], {})
+                                diamond.setdefault("signatures", set()).add(current_signature[1])
+                                diamond.setdefault("nodes", set()).add(node)
+                            diamonds = {key: diamond for key, diamond in diamonds.items() if
+                                        len(diamond.get("signatures", set())) > 1}
+                            for diamond_key, diamond in diamonds.items():
+                                # found a diamond
+                                for node in diamond.get("nodes"):
+                                    to_check = set(node.children_list())
+                                    while to_check:
+                                        child = to_check.pop()
+                                        child_signatures = signature.get_signature(child, child.parent())
+                                        if child_signatures[0] not in diamonds:
+                                            diamond.setdefault("children", set()).add(child_signatures[0])
+                                            to_check.update(child.children_list())
+                            diamond_count = len(diamonds)
+                            perturbations = [(len(diamond.get("children", [])) + 1) * (len(diamond.get(
+                                "signatures")) - 1) for diamond in diamonds.values()]
+                            results.setdefault(signature._signatures[0]._height, {}).setdefault(
+                                diamond_count, {}).setdefault("perturbations", []).append(
+                                sum(perturbations))
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "analyse_diamond_perturbation")
+    )
+
+
+@click.command()
+@click.pass_context
 def analyse_diamonds(ctx):
     results = {}
     ctx.obj["json"] = True
@@ -152,9 +207,9 @@ def analyse_metric(ctx):
         file_type="md"
     )
 
-
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
+cli.add_command(analyse_diamond_perturbation)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
