@@ -6,6 +6,8 @@ import importlib
 
 import logging
 import assess_workflows
+from assess.exceptions.exceptions import TreeInvalidatedException
+from gnmutils.exceptions import DataNotInCacheException
 
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -50,7 +52,12 @@ def analyse_diamonds(ctx):
         with open(file_path, "r") as input_file:
             analysis_files = json.load(input_file).get("data", None)
             for node_count, tree_path in analysis_files.items():
-                tree = tree_builder.build(tree_path[0][0])
+                try:
+                    tree = tree_builder.build(tree_path[0][0])
+                except DataNotInCacheException:
+                    tree = None
+                except TreeInvalidatedException:
+                    tree = None
                 if tree is not None:
                     for signature_builder in signature_builders:
                         signature = signature_builder()
