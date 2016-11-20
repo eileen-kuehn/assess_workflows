@@ -95,8 +95,11 @@ def batch_process_as_vector(ctx):
             input_data = json.load(input_file).get("data")
             for key, values in input_data.items():
                 for value in values:
-                    # first element is tree, second is representative
                     results.append(_init_results())
+                    if len(value) == 1:
+                        # element is file and prototype at the same time
+                        value.append(value[0])
+                    # first element is tree, second is representative
                     results[-1]["files"] = value[:1]
                     results[-1]["prototypes"] = value[1:]
                     results[-1]["results"] = _process_configurations(
