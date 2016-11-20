@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 
 import click
@@ -27,6 +28,117 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
     ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
     ctx.obj["save"] = save
     ctx.obj["use_input"] = use_input
+
+
+@click.command()
+@click.pass_context
+def analyse_diamond_perturbations(ctx):
+    structure = ctx.obj.get("structure")
+
+    if ctx.obj.get("use_input", False):
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2.robjects.lib.dplyr import DataFrame
+
+            grdevices = importr("grDevices")
+            datatable = importr("data.table")
+            base = importr("base")
+
+            input_data = json.load(input_file).get("data", None)
+            result_dt = None
+            for p_count, diamond_values in input_data.items():
+                for diamond_count, diamond_samples in diamond_values.items():
+                    current_dt = datatable.data_table(
+                        p_value=p_count,
+                        diamond_count=diamond_count,
+                        perturbation=base.unlist(diamond_samples.get("perturbations")),
+                        identity_count=base.unlist(diamond_samples.get("node_counts"))
+                    )
+                    if result_dt is None:
+                        result_dt = current_dt
+                    else:
+                        result_dt = datatable.rbindlist([result_dt, current_dt])
+            # summarize data table
+            summarized_values = (DataFrame(result_dt)
+                                 .group_by("p_value", "diamond_count")
+                                 .summarize(perturbation_mean="mean(perturbation)",
+                                            relative_perturbation_mean="mean(perturbation/identity_count)",
+                                            perturbation_stderror="sd(perturbation)/sqrt(length(perturbation))",
+                                            relative_perturbation_stderror="sd(perturbation/identity_count)/sqrt(length(perturbation))"))
+            perturbations_filename = os.path.join(structure.exploratory_path(), "perturbation_diamonds.png")
+            grdevices.png(perturbations_filename)
+            (ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="diamond_count", y="perturbation_mean", color="p_value") + ggplot2.geom_point() +
+             ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="perturbation_mean-perturbation_stderror",
+                ymax="perturbation_mean+perturbation_stderror")).plot()
+            grdevices.dev_off()
+            relative_perturbations_filename = os.path.join(structure.exploratory_path(), "perturbation_relative_diamonds.png")
+            grdevices.png(relative_perturbations_filename)
+            (ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="diamond_count", y="relative_perturbation_mean", color="p_value") + ggplot2.geom_point() +
+             ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="relative_perturbation_mean-relative_perturbation_stderror",
+                ymax="relative_perturbation_mean+relative_perturbation_stderror")).plot()
+            grdevices.dev_off()
+
+
+@click.command()
+@click.pass_context
+def analyse_diamonds(ctx):
+    structure = ctx.obj.get("structure")
+
+    if ctx.obj.get("use_input", False):
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2.robjects.lib.dplyr import DataFrame
+
+            grdevices = importr("grDevices")
+            datatable = importr("data.table")
+            base = importr("base")
+            utils = importr("utils")
+
+            input_data = json.load(input_file).get("data", None)
+            result_dt = None
+            for node_count, p_value_list in input_data.items():
+                for p_value in p_value_list:
+                    current_result = datatable.data_table(
+                        node_count=node_count,
+                        p_value=base.as_factor(p_value),
+                        diamonds=base.unlist(p_value_list[p_value].get("diamonds", [0])),
+                        identity_count=base.unlist(p_value_list[p_value].get("identities", [0]))
+                    )
+                    if result_dt is None:
+                        result_dt = current_result
+                    else:
+                        result_dt = datatable.rbindlist([result_dt, current_result])
+            # summarise data table
+            summarized_values = (DataFrame(result_dt)
+                                 .group_by("p_value", "node_count")
+                                 .summarize(diamond_mean="mean(diamonds)",
+                                            relative_diamond_mean="mean(diamonds/identity_count)",
+                                            diamond_stderror="sd(diamonds)/sqrt(length(diamonds))",
+                                            relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))"))
+            diamonds_filename = os.path.join(structure.exploratory_path(), "pcount_diamonds.png")
+            grdevices.png(diamonds_filename)
+            (ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="node_count", y="diamond_mean", color="p_value") + ggplot2.geom_point() +
+             ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="diamond_mean-diamond_stderror",
+                ymax="diamond_mean+diamond_stderror")).plot()
+            grdevices.dev_off()
+            relative_diamonds_filename = os.path.join(structure.exploratory_path(), "pcount_relative_diamonds.png")
+            grdevices.png(relative_diamonds_filename)
+            (ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="node_count", y="relative_diamond_mean", color="p_value") + ggplot2.geom_point() +
+             ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="relative_diamond_mean-relative_diamond_stderror",
+                ymax="relative_diamond_mean+relative_diamond_stderror")).plot()
+            grdevices.dev_off()
 
 
 @click.command()
@@ -187,6 +299,8 @@ def _distance_and_statistic(base_statistic, distribution_values):
         current_statistic.add(value)
     return distance, current_statistic
 
+cli.add_command(analyse_diamonds)
+cli.add_command(analyse_diamond_perturbations)
 cli.add_command(analyse_attribute_metric)
 
 if __name__ == '__main__':
