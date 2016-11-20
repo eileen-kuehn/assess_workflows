@@ -51,18 +51,19 @@ def analyse_diamonds(ctx):
             analysis_files = json.load(input_file).get("data", None)
             for node_count, tree_path in analysis_files.items():
                 tree = tree_builder.build(tree_path[0][0])
-                for signature_builder in signature_builders:
-                    signature = signature_builder()
-                    node_dict = {}
-                    for node in tree.node_iter():
-                        current_signatures = signature.get_signature(node, node.parent())
-                        node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
-                    diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if len(signatures) > 1]
-                    current_result = results.setdefault(node_count, {}).setdefault(
-                        signature._signatures[0]._height, {})
-                    current_result.setdefault("raw", []).append(diamond_values)
-                    current_result.setdefault("identities", []).append(len(node_dict))
-                    current_result.setdefault("diamonds", []).append(len(diamond_values))
+                if tree is not None:
+                    for signature_builder in signature_builders:
+                        signature = signature_builder()
+                        node_dict = {}
+                        for node in tree.node_iter():
+                            current_signatures = signature.get_signature(node, node.parent())
+                            node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
+                        diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if len(signatures) > 1]
+                        current_result = results.setdefault(node_count, {}).setdefault(
+                            signature._signatures[0]._height, {})
+                        current_result.setdefault("raw", []).append(diamond_values)
+                        current_result.setdefault("identities", []).append(len(node_dict))
+                        current_result.setdefault("diamonds", []).append(len(diamond_values))
     output_results(
         ctx=ctx,
         results=results,
