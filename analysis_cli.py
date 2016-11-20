@@ -61,9 +61,11 @@ def analyse_diamond_perturbation(ctx):
                     if tree is not None:
                         for signature_builder in signature_builders:
                             diamonds = {}
+                            node_signatures = set()
                             signature = signature_builder()
                             for node in tree.node_iter():
                                 current_signature = signature.get_signature(node, node.parent())
+                                node_signatures.add(current_signature[0])
                                 diamond = diamonds.setdefault(current_signature[0], {})
                                 diamond.setdefault("signatures", set()).add(current_signature[1])
                                 diamond.setdefault("nodes", set()).add(node)
@@ -85,6 +87,8 @@ def analyse_diamond_perturbation(ctx):
                             results.setdefault(signature._signatures[0]._height, {}).setdefault(
                                 diamond_count, {}).setdefault("perturbations", []).append(
                                 sum(perturbations))
+                            results[signature._signatures[0]._height][diamond_count].setdefault(
+                                "node_counts", []).append(len(node_signatures))
     output_results(
         ctx=ctx,
         results=results,
