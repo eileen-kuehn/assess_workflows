@@ -293,6 +293,28 @@ def squish_index_into_ranges(ctx, range_width):
 
 
 @click.command()
+@click.option("--include_key", "include_key", default="lambda key, value: False")
+@click.pass_context
+def subset_data(ctx, include_key):
+    results = {}
+    if ctx.obj.get("use_input", False):
+        include_key = eval(include_key)
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data", None)
+            for key, value in input_data.items():
+                if include_key(key, value):
+                    results[key] = value
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "subset_data")
+    )
+
+@click.command()
 @click.option("--seed", "seed", type=int)
 @click.option("--repeat", "repeat", type=int, default=1)
 @click.option("--count", "count", type=int, required=True)
@@ -426,6 +448,7 @@ cli.add_command(index_data_by_number_of_events)
 cli.add_command(index_process_names)
 cli.add_command(index_tree_statistics)
 cli.add_command(squish_index_into_ranges)
+cli.add_command(subset_data)
 cli.add_command(pick_samples)
 
 if __name__ == '__main__':
