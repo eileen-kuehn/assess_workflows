@@ -37,7 +37,6 @@ class Workflow(object):
         self._tasks = []
 
     def add_task(self, cli_path=None, cmd=None, save=None, use_input=None, name=None, **kwargs):
-        print("trying to add %s" % name)
         if name is None:
             name = len(self._tasks) + 1
         if name not in self._names:
