@@ -71,6 +71,7 @@ def analyse_diamonds(ctx):
                         current_result.setdefault("raw", []).append(diamond_values)
                         current_result.setdefault("identities", []).append(len(node_dict))
                         current_result.setdefault("diamonds", []).append(len(diamond_values))
+                        current_result.setdefault("files", []).append(tree_path)
     output_results(
         ctx=ctx,
         results=results,
