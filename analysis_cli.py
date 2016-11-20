@@ -1,12 +1,16 @@
 import os
+import sys
 import json
 import click
+import importlib
 
 import logging
 import assess_workflows
 
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
+
+from assess.generators.gnm_importer import CSVTreeBuilder
 
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.utils import output_results, determine_version
@@ -19,11 +23,52 @@ from assess_workflows.utils.utils import output_results, determine_version
 @click.option("--save", "save", is_flag=True)
 @click.option("--use_input", "use_input", is_flag=True,
               help="Use input file specified for current task.")
+@click.option("--configuration", "configuration", multiple=False,
+              help="Location of configuration file")
 @click.pass_context
-def cli(ctx, basepath, workflow_name, step, save, use_input):
+def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
     ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
     ctx.obj["save"] = save
     ctx.obj["use_input"] = use_input
+    config_module = ctx.obj["structure"].configuration_module()
+    importlib.import_module(config_module)
+    configdict = sys.modules[config_module]
+    ctx.obj["configurations"] = configdict.configurations
+
+
+@click.command()
+@click.pass_context
+def analyse_diamonds(ctx):
+    results = {}
+    ctx.obj["json"] = True
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        tree_builder = CSVTreeBuilder()
+        signature_builders = ctx.obj.get("configurations", [{}])[0].get("signatures", [])
+
+        with open(file_path, "r") as input_file:
+            analysis_files = json.load(input_file).get("data", None)
+            for node_count, tree_path in analysis_files.items():
+                tree = tree_builder.build(tree_path[0][0])
+                for signature_builder in signature_builders:
+                    signature = signature_builder()
+                    node_dict = {}
+                    for node in tree.node_iter():
+                        current_signatures = signature.get_signature(node, node.parent())
+                        node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
+                    diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if len(signatures) > 1]
+                    current_result = results.setdefault(node_count, {}).setdefault(
+                        signature._signatures[0]._height, {})
+                    current_result.setdefault("raw", []).append(diamond_values)
+                    current_result.setdefault("identities", []).append(len(node_dict))
+                    current_result.setdefault("diamonds", []).append(len(diamond_values))
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "analyse_diamonds")
+    )
 
 
 @click.command()
@@ -99,6 +144,7 @@ def analyse_metric(ctx):
 
 
 cli.add_command(analyse_metric)
+cli.add_command(analyse_diamonds)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
