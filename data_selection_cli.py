@@ -249,8 +249,9 @@ def index_tree_statistics(ctx, paths, pcount):
 
 @click.command()
 @click.option("--range_width", "range_width", default=.1)
+@click.option("--maximum_chain", "maximum_chain", default=100)
 @click.pass_context
-def squish_index_into_ranges(ctx, range_width):
+def squish_index_into_ranges(ctx, range_width, maximum_chain):
     results = {}
     if ctx.obj.get("use_input", False):
         def probability_function(one, two):
@@ -262,26 +263,33 @@ def squish_index_into_ranges(ctx, range_width):
             input_data = json.load(input_file).get("data", None)
             keys = [int(key) for key in input_data.keys()]
             keys.sort()
-            probabilities = {index: probability for index, probability in
-                             enumerate(probability_function(one, two) for one, two in
-                                       zip(keys, keys[1:])) if probability <= 1}
-            sorted_indexes = [key for key in probabilities]
-            sorted_indexes.sort()
+            probabilities = [index for index, probability in enumerate(
+                probability_function(one, two) for one, two in zip(
+                    keys, keys[1:])) if probability <= 1]
 
-            for index in sorted_indexes:
-                try:
-                    # check all indexes that belong to a chain
-                    key_collection = [keys[index]]
-                    merged = input_data.pop(str(keys[index]), [])
-                    while index in sorted_indexes:
-                        index += 1
-                        key_collection.append(keys[index])
-                        merged.extend(input_data.pop(str(keys[index])))
-                    # FIXME: a qualitative splitting should be done for not getting too wide ranges
-                    mean = sum(key_collection)/len(key_collection)
-                    input_data[str(mean)] = merged
-                except KeyError:
-                    continue  # current index has already been removed
+            while probabilities:
+                index = probabilities[0]
+                # check all indexes that belong to a chain
+                key_collection = [[keys[index]]]
+                merged = {keys[index]: input_data.pop(str(keys[index]))}
+                while index in probabilities:
+                    probabilities.pop(0)
+                    index += 1
+                    try:
+                        merged[keys[index]] = input_data.pop(str(keys[index]))
+                        key_collection[-1].append(keys[index])
+                    except KeyError:
+                        continue
+                while key_collection:
+                    current_key = key_collection.pop()
+                    if len(current_key) > maximum_chain:
+                        split_point = len(current_key) // maximum_chain
+                        key_collection.append(current_key[:split_point])
+                        key_collection.append(current_key[split_point:])
+                    else:
+                        mean = sum(current_key) / len(current_key)
+                        merged_files = [merged.pop(key) for key in current_key]
+                        input_data[str(mean)] = [value for values in merged_files for value in values]
             results = input_data
 
     output_results(
