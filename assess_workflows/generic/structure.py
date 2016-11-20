@@ -12,6 +12,9 @@ class Structure(object):
         self.name = name
         self.step = step
 
+    def base_script_path(self):
+        return os.path.join(self.basepath, os.environ.get("DISS_SCRIPTFOLDER_NAME", "scripts"))
+
     @staticmethod
     def analysis_cli():
         return os.path.join(os.path.join(os.path.dirname(
