@@ -32,6 +32,16 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
 @click.command()
 @click.pass_context
 def analyse_attribute_metric(ctx):
+    """
+    Method performs specific analysis on SetStatistics and SplittedStatistics based on two different
+    measurements. First considers the change of the mean of one specific distribution to change the
+    overlap with the input distribution. The second changes the number of samples picked for a given
+    distribution.
+
+    Method only produces plots and no further results.
+
+    :param ctx:
+    """
     structure = ctx.obj.get("structure")
 
     if ctx.obj.get("save", False):
