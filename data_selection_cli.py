@@ -260,32 +260,40 @@ def squish_index_into_ranges(ctx, range_width, maximum_chain):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
         with open(file_path, "r") as input_file:
-            input_data = json.load(input_file).get("data", None)
+            input_data = json.load(input_file)["data"]
+            # number of nodes, events, tmes
             keys = [int(key) for key in input_data.keys()]
             keys.sort()
+            # indizes of numbers overlapping within probability_function
             probabilities = [index for index, probability in enumerate(
                 probability_function(one, two) for one, two in zip(
                     keys, keys[1:])) if probability <= 1]
-
+            # pick ranges from sequences of overlapping numbers
             while probabilities:
                 index = probabilities[0]
                 # check all indexes that belong to a chain
-                key_collection = [[keys[index]]]
+                key_chain = [keys[index]]
                 merged = {keys[index]: input_data.pop(str(keys[index]))}
                 while index in probabilities:
                     probabilities.pop(0)
                     index += 1
                     try:
                         merged[keys[index]] = input_data.pop(str(keys[index]))
-                        key_collection[-1].append(keys[index])
-                    except KeyError:
+                        key_chain.append(keys[index])
+                    except KeyError:  # TODO: is this still needed?
                         continue
+                # split chain if it is too long
+                key_collection = [key_chain]
                 while key_collection:
                     current_key = key_collection.pop()
                     if len(current_key) > maximum_chain:
-                        split_point = len(current_key) // maximum_chain
-                        key_collection.append(current_key[:split_point])
-                        key_collection.append(current_key[split_point:])
+                        if len(current_key) % maximum_chain == 0:
+                            split_point = maximum_chain
+                        else:
+                            split_point = int(len(current_key) / (len(current_key) // maximum_chain + 1))
+                        while current_key:
+                            key_collection.append(current_key[:split_point])
+                            current_key = current_key[split_point:]
                     else:
                         mean = sum(current_key) / len(current_key)
                         merged_files = [merged.pop(key) for key in current_key]
