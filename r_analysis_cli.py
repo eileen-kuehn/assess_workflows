@@ -7,6 +7,7 @@ import rpy2
 import math
 
 from assess_workflows.generic.structure import Structure
+from assess_workflows.utils.utils import output_r_data
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
 
@@ -91,8 +92,8 @@ def analyse_diamond_perturbations(ctx):
             if ctx.obj.get("save", False):
                 # save model data for further adaptations
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
-                _save_r_data(
-                    filename=rdata_filename, absolute_plot=absolute_plot,
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
                     relative_plot=relative_plot, absolute_filename=absolute_filename,
                     relative_filename=relative_filename, summarized_values=summarized_values,
                     result_dt=result_dt
@@ -178,21 +179,14 @@ def analyse_diamonds(ctx):
             if ctx.obj.get("save", False):
                 # save model data for further adaptations
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
-                _save_r_data(
-                    filename=rdata_filename, absolute_plot=absolute_plot,
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
                     relative_plot=relative_plot, absolute_pplot=absolute_pplot,
                     relative_pplot=relative_pplot, absolute_filename=absolute_filename,
                     relative_filename=relative_filename, absolute_pfilename=absolute_pfilename,
                     relative_pfilename=relative_pfilename, summarized_values=summarized_values,
                     summarized_pvalues=summarized_pvalues, result_dt=result_dt
                 )
-
-
-def _save_r_data(filename, **kwargs):
-    from rpy2 import robjects
-    for key, value in kwargs.items():
-        robjects.globalenv[key] = value
-    robjects.r.save(*list(kwargs.keys()), file=filename)
 
 
 @click.command()
@@ -214,18 +208,20 @@ def analyse_attribute_metric(ctx):
         from rpy2.robjects.packages import STAP, importr
         import rpy2.robjects.lib.ggplot2 as ggplot2
         from rpy2.robjects.lib.dplyr import DataFrame
-
+        from rpy2 import robjects
         with open(os.path.join(os.path.join(structure.base_script_path(), "R"),
                                "statistics.R")) as statistics_r_file:
             statistics_r_string = statistics_r_file.read()
         statistics = STAP(statistics_r_string, "statistics")
+        with open(os.path.join(os.path.join(structure.base_script_path(), "R"),
+                  "utils.R")) as utils_r_file:
+            utils_r_string = utils_r_file.read()
+        rutils = STAP(utils_r_string, "rutils")
 
-        utils = importr("utils")
         base = importr("base")
         stats = importr("stats")
         grdevices = importr("grDevices")
         datatable = importr("data.table")
-        fpc = importr("fpc")
 
         base_mean = 5
         # generate initial distribution to learn attribute statistics from
@@ -242,47 +238,36 @@ def analyse_attribute_metric(ctx):
             splitted_statistics.add(value)
 
         validation_distribution_dt = datatable.data_table(validation_distribution)
+        validation_plot = ggplot2.ggplot(validation_distribution_dt) + ggplot2.aes_string(x="V1") + \
+                          ggplot2.geom_histogram(binwidth=.5)
+
+        set_values = [entry for value in ([statistic.value] * statistic.count for
+                                          statistic in set_statistics) for entry in value]
+        set_values_dt = datatable.data_table(base.unlist(set_values))
+        set_plot = ggplot2.ggplot(set_values_dt) + ggplot2.aes_string(x="V1") + ggplot2.geom_histogram(binwidth=1)
+        # output current results
+        splitted_plot = ggplot2.ggplot(datatable.data_table(x=rutils.plot_x_get_range(validation_plot))) + \
+                        ggplot2.aes_string(x="x")
+        for index, statistic in enumerate(splitted_statistics):
+            splitted_plot = splitted_plot + ggplot2.stat_function(
+                fun=statistics.stats_dnorm_height,
+                args=robjects.FloatVector([statistic.value, math.sqrt(
+                    statistic.variance if statistic.variance is not None else 0), statistic.count]))
 
         # generate plots
-        filename = os.path.join(structure.exploratory_path(), "validation_distribution.png")
-        grdevices.png(filename)
-        (ggplot2.ggplot(validation_distribution_dt) + ggplot2.aes_string(x="V1") + ggplot2.geom_histogram(binwidth=.5)).plot()
-        grdevices.dev_off()
-
-        set_values = [entry for value in (
-            [statistic.value] * statistic.count for statistic in set_statistics)
-                      for entry in value]
-        set_values_dt = datatable.data_table(base.unlist(set_values))
+        distribution_filename = os.path.join(structure.exploratory_path(), "validation_distribution.png")
         set_filename = os.path.join(structure.exploratory_path(), "set_distribution.png")
-        grdevices.png(set_filename)
-        (ggplot2.ggplot(set_values_dt) + ggplot2.aes_string(x="V1") + ggplot2.geom_histogram(binwidth=1)).plot()
-        grdevices.dev_off()
-
-        # output current results
-        splitted_dt = None
-        for index, statistic in enumerate(splitted_statistics):
-            current_dt = datatable.data_table(
-                    value=base.as_factor(index),
-                    distribution=stats.rnorm(
-                        statistic.count,
-                        mean=statistic.value,
-                        sd=math.sqrt(statistic.variance if statistic.variance is not None else 0)))
-            if splitted_dt is None:
-                splitted_dt = current_dt
-            else:
-                splitted_dt = datatable.rbindlist([splitted_dt, current_dt])
-
         splitted_filename = os.path.join(structure.exploratory_path(), "splitted_distribution.png")
-        grdevices.png(splitted_filename)
-        (ggplot2.ggplot(splitted_dt) + ggplot2.aes_string(
-            x="distribution", y="..count..", fill="value") +
-         ggplot2.geom_density(position="stack", adjust=1)).plot()
-        grdevices.dev_off()
 
-        current_mean = base_mean - .1
-        overlaps = []
-        set_distances = []
-        splitted_distances = []
+        for filename, plot in {distribution_filename: validation_plot,
+                               set_filename: set_plot,
+                               splitted_filename: splitted_plot}.items():
+            grdevices.png(filename)
+            plot.plot()
+            grdevices.dev_off()
+
+        current_mean = base_mean - .11
+        overlaps, set_distances, splitted_distances = [], [], []
         while len(overlaps) == 0 or overlaps[-1] > 0.1:
             current_mean += .1
             for _ in range(10):
@@ -292,13 +277,18 @@ def analyse_attribute_metric(ctx):
                 splitted_distance, _ = _distance_and_statistic(splitted_statistics, current_distribution)
                 set_distances.append(set_distance)
                 splitted_distances.append(splitted_distance)
-        _plot_distances_for_values(structure, set_distances, overlaps, "set_overlap")
-        _plot_distances_for_values(structure, splitted_distances, overlaps, "splitted_overlap")
+        overlap_dt = datatable.data_table(overlaps=base.rep(base.unlist(overlaps), 2),
+                                          distances=base.unlist(set_distances + splitted_distances),
+                                          type=base.as_factor(base.rep(base.unlist(
+                                              ["set", "splitted"]), each=len(overlaps))))
+        robjects.globalenv["optimal_overlaps"] = rutils.analysis_attribute_distances_optimal_overlaps
+        upper_overlap_plot, lower_overlap_plot, summarized_overlap_dt, ratio_summarized_overlap_dt = \
+            _upper_and_lower_plot("overlaps", overlap_dt, "optimal_overlaps", 2000)
+        _layout_plots(os.path.join(structure.exploratory_path(), "overlaps.png"),
+                      upper_overlap_plot, lower_overlap_plot)
 
         current_count = 2000
-        counts = []
-        set_distances = []
-        splitted_distances = []
+        counts, set_distances, splitted_distances = [], [], []
         while current_count > 0:
             for _ in range(10):
                 counts.append(current_count)
@@ -307,9 +297,90 @@ def analyse_attribute_metric(ctx):
                 splitted_distance, _ = _distance_and_statistic(splitted_statistics, current_distribution)
                 set_distances.append(set_distance)
                 splitted_distances.append(splitted_distance)
-            current_count -= 10
-        _plot_distances_for_values(structure, set_distances, counts, "set_counts")
-        _plot_distances_for_values(structure, splitted_distances, counts, "splitted_counts")
+            current_count -= 11
+        count_dt = datatable.data_table(counts=base.rep(base.unlist(counts), 2),
+                                        distances=base.unlist(set_distances + splitted_distances),
+                                        type=base.as_factor(base.rep(base.unlist(
+                                            ["set", "splitted"]), each=len(counts))))
+        robjects.globalenv["optimal_counts"] = rutils.analysis_attribute_distances_optimal_counts
+        upper_count_plot, lower_count_plot, summarized_count_dt, ratio_summarized_count_dt = \
+            _upper_and_lower_plot("counts", count_dt, "optimal_counts", 1000)
+        _layout_plots(os.path.join(structure.exploratory_path(), "counts.png"),
+                      upper_count_plot, lower_count_plot)
+
+        rdata_filename = structure.intermediate_file_path(file_type="RData")
+        output_r_data(
+            ctx=ctx, filename=rdata_filename, validation_distribution_dt=validation_distribution_dt,
+            validation_plot=validation_plot, distribution_filename=distribution_filename,
+            set_values_dt=set_values_dt, set_plot=set_plot, set_filename=set_filename,
+            splitted_filename=splitted_filename, splitted_plot=splitted_plot,
+            overlap_dt=overlap_dt, count_dt=count_dt, summarized_count_dt=summarized_count_dt,
+            ratio_summarized_count_dt=ratio_summarized_count_dt,
+            summarized_overlap_dt=summarized_overlap_dt, ratio_summarized_overlap_dt=ratio_summarized_overlap_dt,
+            upper_overlap_plot=upper_overlap_plot, lower_overlap_plot=lower_overlap_plot,
+            upper_count_plot=upper_count_plot, lower_count_plot=lower_count_plot,
+            optimal_overlaps=robjects.r["optimal_overlaps"], optimal_counts=robjects.r["optimal_counts"]
+        )
+
+
+def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
+    from rpy2 import robjects
+    from rpy2.robjects.packages import importr
+    from rpy2.robjects.lib.ggplot2 import ggplot2
+    from rpy2.robjects.lib.dplyr import DataFrame
+
+    long_format_dt = (DataFrame(overlap_dt)
+                      .group_by(variant, "type")
+                      .summarize(distance_mean="mean(distances)",
+                                 distance_stderror="sd(distances)/sqrt(length(distances))"))
+    ratio_format_dt = (DataFrame(long_format_dt)
+                       .group_by(variant, "type")
+                       .mutate(mean_ratio="distance_mean/%s(%s, %s)" % (optimal_rfunction_name, variant, base_distance),
+                               ratio_error="distance_stderror/distance_mean"))
+
+    upper_plot = (ggplot2.ggplot(long_format_dt) + ggplot2.aes_string(
+        x=variant, y="distance_mean", colour="type") + ggplot2.geom_point() +
+                          ggplot2.geom_errorbar() + ggplot2.aes_string(
+        ymin="distance_mean-distance_stderror", ymax="distance_mean+distance_stderror") +
+                          ggplot2.stat_function(
+                              fun=optimal_rfunction_name, args=robjects.IntVector([base_distance])) +
+                          ggplot2.theme(
+                              **{"legend.justification": robjects.IntVector([1,1]),
+                                 "legend.position": robjects.IntVector([1,1]),
+                                 "axis.title.x": ggplot2.element_blank(),
+                                 "axis.text.x": ggplot2.element_blank()}))
+    lower_plot = (ggplot2.ggplot(ratio_format_dt) + ggplot2.aes_string(x=variant, y="mean_ratio", colour="type") +
+                  ggplot2.geom_point() + ggplot2.geom_errorbar(ggplot2.aes_string(
+        ymin="mean_ratio-ratio_error", ymax="mean_ratio+ratio_error")) +
+                  ggplot2.theme(**{"legend.position": "none"}))
+    return upper_plot, lower_plot, long_format_dt, ratio_format_dt
+
+
+def _layout_plots(filename, first_plot, second_plot):
+    from rpy2 import robjects
+    from rpy2.robjects.packages import importr
+    gridextra = importr("gridExtra")
+    grdevices = importr("grDevices")
+
+    robjects.r("""
+        adapt_width <- function(plot_1, plot_2) {
+            require(ggplot2)
+            require(grid)
+            require(gridExtra)
+            plot_1 <- ggplot_gtable(ggplot_build(plot_1))
+            plot_2 <- ggplot_gtable(ggplot_build(plot_2))
+            maxWidth = unit.pmax(plot_1$widths[2:3], plot_2$widths[2:3])
+            plot_1$widths[2:3] <- maxWidth
+            plot_2$widths[2:3] <- maxWidth
+            list(plot_1, plot_2)
+        }
+    """)
+    adapt_width = robjects.r["adapt_width"]
+    plots = adapt_width(first_plot, second_plot)
+
+    grdevices.png(filename)
+    gridextra.grid_arrange(plots[0], plots[1], heights=robjects.IntVector([3, 1]))
+    grdevices.dev_off()
 
 
 def _plot_distances_for_values(structure, distances, values, variant):
