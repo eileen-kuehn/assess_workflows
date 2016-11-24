@@ -49,6 +49,13 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
             print(results, file=output_channel)
 
 
+def output_r_data(ctx, filename, **kwargs):
+    from rpy2 import robjects
+    for key, value in kwargs.items():
+        robjects.globalenv[key] = value
+    robjects.r.save(*list(kwargs.keys()), file=filename)
+
+
 def do_multicore(count=1, target=None, data=None):
     pool = multiprocessing.Pool(processes=count)
     result_list = pool.map(target, data)
