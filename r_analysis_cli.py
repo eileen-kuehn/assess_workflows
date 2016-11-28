@@ -53,7 +53,7 @@ def analyse_diamond_perturbations(ctx):
                 for diamond_count, diamond_samples in diamond_values.items():
                     current_dt = datatable.data_table(
                         p_value=p_count,
-                        diamond_count=diamond_count,
+                        diamond_count=base.as_integer(diamond_count),
                         perturbation=base.unlist(diamond_samples.get("perturbations")),
                         identity_count=base.unlist(diamond_samples.get("node_counts"))
                     )
@@ -147,11 +147,11 @@ def analyse_diamonds(ctx):
                                              diamond_stderror="sd(diamonds)/sqrt(length(diamonds))",
                                              relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))"))
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="node_count", y="diamond_mean", color="p_value") + ggplot2.geom_point() + \
+                x="node_count", y="diamond_mean", color="as.factor(p_value)") + ggplot2.geom_point() + \
                 ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
                 ymin="diamond_mean-diamond_stderror", ymax="diamond_mean+diamond_stderror")
             relative_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="node_count", y="relative_diamond_mean", color="p_value") + \
+                x="node_count", y="relative_diamond_mean", color="as.factor(p_value)") + \
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
                 ymin="relative_diamond_mean-relative_diamond_stderror",
                 ymax="relative_diamond_mean+relative_diamond_stderror")
