@@ -102,6 +102,50 @@ def analyse_diamond_perturbations(ctx):
 
 @click.command()
 @click.pass_context
+def analyse_diamond_level(ctx):
+    structure = ctx.obj.get("structure")
+
+    if ctx.obj.get("use_input", False):
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2 import robjects
+
+            grdevices = importr("grDevices")
+            base = importr("base")
+            datatable = importr("data.table")
+
+            input_data = json.load(input_file).get("data", None)
+            result_dt = None
+            for node_count, p_value_list in input_data.items():
+                for p_value in p_value_list:
+                    current_result = datatable.data_table(
+                        p_value=base.as_factor(p_value),
+                        level=robjects.IntVector([value for elem in p_value_list[p_value].get(
+                            "raw", [0]) for value in elem] or [0])
+                    )
+                    if result_dt is None:
+                        result_dt = current_result
+                    else:
+                        result_dt = datatable.rbindlist([result_dt, current_result])
+            plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="p_value", y="level") + \
+                   ggplot2.geom_boxplot()
+            plot_filename = os.path.join(structure.exploratory_path(), "diamond_level.png")
+            grdevices.png(plot_filename)
+            plot.plot()
+            grdevices.dev_off()
+
+            if ctx.obj.get("save", False):
+                # save model data for further adaptations
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, plot=plot, plot_filename=plot_filename,
+                    result_dt=result_dt)
+
+
+@click.command()
+@click.pass_context
 def analyse_diamonds(ctx):
     structure = ctx.obj.get("structure")
 
@@ -426,6 +470,7 @@ def _distance_and_statistic(base_statistic, distribution_values):
 
 cli.add_command(analyse_diamonds)
 cli.add_command(analyse_diamond_perturbations)
+cli.add_command(analyse_diamond_level)
 cli.add_command(analyse_attribute_metric)
 
 if __name__ == '__main__':
