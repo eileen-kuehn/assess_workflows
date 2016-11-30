@@ -16,6 +16,11 @@ class Structure(object):
         return os.path.join(self.basepath, os.environ.get("DISS_SCRIPTFOLDER_NAME", "scripts"))
 
     @staticmethod
+    def gnm_cli():
+        return os.path.join(os.path.join(os.path.dirname(
+            os.path.realpath(assess_workflows.__file__)), os.pardir), "gnm_cli.py")
+
+    @staticmethod
     def r_analysis_cli():
         return os.path.join(os.path.join(os.path.dirname(
             os.path.realpath(assess_workflows.__file__)), os.pardir), "r_analysis_cli.py")
