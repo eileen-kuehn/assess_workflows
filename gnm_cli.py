@@ -33,11 +33,14 @@ def prepare_raw_data(ctx, paths, output_path, pcount):
                 "path": os.path.join(os.path.join(folder, workernode_subdir), run_subdir),
                 "output_path": output_path
             })
-    do_multicore(
-        count=pcount,
-        target=_prepare_raw_data,
-        data=data
-    )
+    if pcount > 1:
+        do_multicore(
+            count=pcount,
+            target=_prepare_raw_data,
+            data=data
+        )
+    else:
+        _prepare_raw_data(data)
 
 
 def _prepare_raw_data(kwargs):
