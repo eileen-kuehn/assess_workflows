@@ -71,24 +71,44 @@ def analyse_diamond_perturbations(ctx):
                                 diamond.setdefault("nodes", set()).add(node)
                             diamonds = {key: diamond for key, diamond in diamonds.items() if
                                         len(diamond.get("signatures", set())) > 1}
+                            diamond_perturbation = {}
                             for diamond_key, diamond in diamonds.items():
                                 # found a diamond
+                                result = diamond_perturbation.setdefault(diamond_key, {
+                                    "factor": 1,
+                                    "nested": 0,
+                                    "nodes": set()
+                                })
+                                result["factor"] *= len(diamond.get("signatures", set()))
                                 for node in diamond.get("nodes"):
                                     to_check = set(node.children_list())
+                                    result["nodes"].add(node)
                                     while to_check:
                                         child = to_check.pop()
                                         child_signatures = signature.get_signature(child, child.parent())
                                         if child_signatures[0] not in diamonds:
-                                            diamond.setdefault("children", set()).add(child_signatures[0])
+                                            # child is only node, not diamond, so also take care on its children
+                                            result["nodes"].add(child)
                                             to_check.update(child.children_list())
-                            diamond_count = len(diamonds)
-                            perturbations = [(len(diamond.get("children", [])) + 1) * (len(diamond.get(
-                                "signatures")) - 1) for diamond in diamonds.values()]
-                            results.setdefault(signature._signatures[0]._height, {}).setdefault(
-                                diamond_count, {}).setdefault("perturbations", []).append(
-                                sum(perturbations))
-                            results[signature._signatures[0]._height][diamond_count].setdefault(
-                                "node_counts", []).append(len(node_signatures))
+                                        else:
+                                            # take care that the diamond is initialised as nested diamond
+                                            diamond_perturbation[child_signatures[0]] = {
+                                                "factor": result["factor"],
+                                                "nested": result["nested"] + 1,
+                                                "nodes": set()
+                                            }
+                            diamond_count = len(diamond_perturbation)
+
+                            perturbations = [(diamond.get("factor", 2) - 1) * len(diamond.get(
+                                "nodes", [])) for diamond in diamond_perturbation.values()]
+                            perturbation_result = results.setdefault(
+                                signature._signatures[0]._height, {}).setdefault(diamond_count, {})
+                            perturbation_result.setdefault("perturbations", []).append(sum(perturbations))
+                            perturbation_result.setdefault("node_counts", []).append(len(node_signatures))
+                            perturbation_result.setdefault("raw", []).append({key: {
+                                "factor": value["factor"],
+                                "nested": value["nested"],
+                                "nodes": len(value["nodes"])} for key, value in diamond_perturbation.items()})
     output_results(
         ctx=ctx,
         results=results,
