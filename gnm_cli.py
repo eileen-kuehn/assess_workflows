@@ -40,7 +40,7 @@ def prepare_raw_data(ctx, paths, output_path, pcount):
             data=data
         )
     else:
-        _prepare_raw_data(data)
+        _prepare_raw_data(data[0])
 
 
 def _prepare_raw_data(kwargs):
