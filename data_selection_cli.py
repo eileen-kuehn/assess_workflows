@@ -7,6 +7,7 @@ import logging
 import subprocess
 
 from assess.exceptions.exceptions import TreeInvalidatedException
+from assess_workflows.utils.multicoreresult import MulticoreResult
 from gnmutils.exceptions import DataNotInCacheException
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -105,8 +106,7 @@ def index_data_by_tme(ctx, paths, pcount):
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
 def index_data_by_uid(ctx, paths, pcount):
-    results = {}
-    result_list = []
+    results = MulticoreResult()
     filenames = []
     for path in paths:
         filenames.extend(glob.glob("%s/*/*-process.csv" % path))
@@ -116,12 +116,11 @@ def index_data_by_uid(ctx, paths, pcount):
             target=_data_by_uid,
             data=filenames
         )
+        for result in result_list:
+            results += result
     else:
         for filename in filenames:
-            result_list.append(_data_by_uid(filename))
-    for result in result_list:
-        for uid in result:
-            results.setdefault(uid, []).extend(result.get(uid, []))
+            results += _data_by_uid(filename)
 
     output_results(
         ctx=ctx,
@@ -385,15 +384,13 @@ def _data_by_tme(filename):
 
 
 def _data_by_uid(filename):
-    results = {}
+    results = MulticoreResult()
     tree_builder = CSVTreeBuilder()
     try:
         tree = tree_builder.build(filename)
-    except DataNotInCacheException:
-        tree = None
-    except TreeInvalidatedException:
-        tree = None
-    if tree is not None:
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
         uids = set()
         for node in tree.node_iter():
             if node.uid not in uids:
