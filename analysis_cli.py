@@ -79,40 +79,39 @@ def analyse_diamond_perturbations(ctx, pcount):
 
 
 @click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def analyse_diamonds(ctx):
-    results = {}
+def analyse_diamonds(ctx, pcount):
+    results = MulticoreResult()
     ctx.obj["json"] = True
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
-        tree_builder = CSVTreeBuilder()
         signature_builders = ctx.obj.get("configurations", [{}])[0].get("signatures", [])
 
         with open(file_path, "r") as input_file:
             analysis_files = json.load(input_file).get("data", None)
-            for node_count, tree_paths in analysis_files.items():
-                for tree_path in tree_paths:
-                    try:
-                        tree = tree_builder.build(tree_path[0])
-                    except DataNotInCacheException:
-                        tree = None
-                    except TreeInvalidatedException:
-                        tree = None
-                    if tree is not None:
-                        for signature_builder in signature_builders:
-                            signature = signature_builder()
-                            node_dict = {}
-                            for node in tree.node_iter():
-                                current_signatures = signature.get_signature(node, node.parent())
-                                node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
-                            diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if len(signatures) > 1]
-                            current_result = results.setdefault(node_count, {}).setdefault(
-                                signature._signatures[0]._height, {})
-                            current_result.setdefault("raw", []).append(diamond_values)
-                            current_result.setdefault("identities", []).append(len(node_dict))
-                            current_result.setdefault("diamonds", []).append(len(diamond_values))
-                            current_result.setdefault("files", []).append(tree_path[0])
+            if pcount > 1:
+                data = [{
+                    "node_count": node_count,
+                    "filepath": tree_path[0],
+                    "signature_builders": signature_builders} for node_count, tree_paths in
+                        analysis_files.items() for tree_path in tree_paths]
+                multicore_results = do_multicore(
+                    count=pcount,
+                    target=_analyse_diamonds,
+                    data=data
+                )
+                for result in multicore_results:
+                    results += result
+            else:
+                for node_count, tree_paths in analysis_files.items():
+                    for tree_path in tree_paths:
+                        results += _analyse_diamonds({
+                            "node_count": node_count,
+                            "filepath": tree_path[0],
+                            "signature_builders": signature_builders})
+
     output_results(
         ctx=ctx,
         results=results,
@@ -254,6 +253,38 @@ def _analyse_diamond_perturbation(kwargs):
                 "nested": value["nested"],
                 "nodes": len(value["nodes"])} for key, value in diamond_perturbation.items()})
     return perturbation_results
+
+
+def _analyse_diamonds(kwargs):
+    """
+    :param kwargs: dict containing keys node_count, filepath and signature_builders
+    :return:
+    """
+    node_count = kwargs.get("node_count", None)
+    filepath = kwargs.get("filepath", None)
+    signature_builders = kwargs.get("signature_builders", None)
+    result = MulticoreResult()
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filepath)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
+        for signature_builder in signature_builders:
+            signature = signature_builder()
+            node_dict = {}
+            for node in tree.node_iter():
+                current_signatures = signature.get_signature(node, node.parent())
+                node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
+            diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if
+                              len(signatures) > 1]
+            current_result = result.setdefault(node_count, {}).setdefault(
+                signature._signatures[0]._height, {})
+            current_result.setdefault("raw", []).append(diamond_values)
+            current_result.setdefault("identities", []).append(len(node_dict))
+            current_result.setdefault("diamonds", []).append(len(diamond_values))
+            current_result.setdefault("files", []).append(filepath)
+    return result
 
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
