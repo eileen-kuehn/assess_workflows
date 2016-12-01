@@ -221,7 +221,7 @@ def index_process_names(ctx, paths, pcount):
 @click.pass_context
 def index_tree_statistics(ctx, paths, pcount):
     filenames = []
-    results = {}
+    results = MulticoreResult()
     for path in paths:
         filenames.extend(glob.glob(("%s/*/*-process.csv" % path)))
     if pcount > 1:
@@ -231,10 +231,10 @@ def index_tree_statistics(ctx, paths, pcount):
             data=filenames
         )
         for result in result_list:
-            results.update(result)
+            results += result
     else:
         for filename in filenames:
-            results.update(_tree_statistics(filename))
+            results += _tree_statistics(filename)
 
     output_results(
         ctx=ctx,
@@ -432,7 +432,7 @@ def _process_names(filename):
 
 
 def _tree_statistics(filename):
-    result = {}
+    result = MulticoreResult()
     tree_builder = CSVTreeBuilder()
     try:
         tree = tree_builder.build(filename)
