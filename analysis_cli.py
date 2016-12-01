@@ -7,6 +7,7 @@ import importlib
 import logging
 import assess_workflows
 from assess.exceptions.exceptions import TreeInvalidatedException
+from assess_workflows.utils.multicoreresult import MulticoreResult
 from gnmutils.exceptions import DataNotInCacheException
 
 from utility.exceptions import ExceptionFrame
@@ -15,7 +16,7 @@ from utility.report import LVL
 from assess.generators.gnm_importer import CSVTreeBuilder
 
 from assess_workflows.generic.structure import Structure
-from assess_workflows.utils.utils import output_results, determine_version
+from assess_workflows.utils.utils import output_results, determine_version, do_multicore
 
 
 @click.group()
@@ -39,76 +40,36 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
 
 
 @click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def analyse_diamond_perturbations(ctx):
-    results = {}
+def analyse_diamond_perturbations(ctx, pcount):
+    results = MulticoreResult()
     ctx.obj["json"] = True
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
-        tree_builder = CSVTreeBuilder()
         signature_builders = ctx.obj.get("configurations", [{}])[0].get("signatures", [])
 
         with open(file_path, "r") as input_file:
             analysis_files = json.load(input_file).get("data", None)
-            for tree_paths in analysis_files.values():
-                for tree_path in tree_paths:
-                    tree_path = tree_path[0]
-                    try:
-                        tree = tree_builder.build(tree_path)
-                    except (DataNotInCacheException, TreeInvalidatedException):
-                        tree = None
-                    if tree is not None:
-                        for signature_builder in signature_builders:
-                            diamonds = {}
-                            node_signatures = set()
-                            signature = signature_builder()
-                            for node in tree.node_iter():
-                                current_signature = signature.get_signature(node, node.parent())
-                                node_signatures.add(current_signature[0])
-                                diamond = diamonds.setdefault(current_signature[0], {})
-                                diamond.setdefault("signatures", set()).add(current_signature[1])
-                                diamond.setdefault("nodes", set()).add(node)
-                            diamonds = {key: diamond for key, diamond in diamonds.items() if
-                                        len(diamond.get("signatures", set())) > 1}
-                            diamond_perturbation = {}
-                            for diamond_key, diamond in diamonds.items():
-                                # found a diamond
-                                result = diamond_perturbation.setdefault(diamond_key, {
-                                    "factor": 1,
-                                    "nested": 0,
-                                    "nodes": set()
-                                })
-                                result["factor"] *= len(diamond.get("signatures", set()))
-                                for node in diamond.get("nodes"):
-                                    to_check = set(node.children_list())
-                                    result["nodes"].add(node)
-                                    while to_check:
-                                        child = to_check.pop()
-                                        child_signatures = signature.get_signature(child, child.parent())
-                                        if child_signatures[0] not in diamonds:
-                                            # child is only node, not diamond, so also take care on its children
-                                            result["nodes"].add(child)
-                                            to_check.update(child.children_list())
-                                        else:
-                                            # take care that the diamond is initialised as nested diamond
-                                            diamond_perturbation[child_signatures[0]] = {
-                                                "factor": result["factor"],
-                                                "nested": result["nested"] + 1,
-                                                "nodes": set()
-                                            }
-                            diamond_count = len(diamond_perturbation)
+            if pcount > 1:
+                # combine data
+                data = [{
+                            "filepath": path[0],
+                            "signature_builders": signature_builders
+                        } for paths in analysis_files.values() for path in paths]
+                multicore_results = do_multicore(
+                    count=pcount,
+                    target=_analyse_diamond_perturbation,
+                    data=data)
+                for result in multicore_results:
+                    results += result
+            else:
+                for tree_paths in analysis_files.values():
+                    for tree_path in tree_paths:
+                        results += _analyse_diamond_perturbation({
+                            "filepath": tree_path[0], "signature_builders": signature_builders})
 
-                            perturbations = [(diamond.get("factor", 2) - 1) * len(diamond.get(
-                                "nodes", [])) for diamond in diamond_perturbation.values()]
-                            perturbation_result = results.setdefault(
-                                signature._signatures[0]._height, {}).setdefault(diamond_count, {})
-                            perturbation_result.setdefault("perturbations", []).append(sum(perturbations))
-                            perturbation_result.setdefault("node_counts", []).append(len(node_signatures))
-                            perturbation_result.setdefault("raw", []).append({key: {
-                                "factor": value["factor"],
-                                "nested": value["nested"],
-                                "nodes": len(value["nodes"])} for key, value in diamond_perturbation.items()})
     output_results(
         ctx=ctx,
         results=results,
@@ -230,6 +191,69 @@ def analyse_metric(ctx):
         source="%s (%s)" % (__file__, "analyse_metric"),
         file_type="md"
     )
+
+
+def _analyse_diamond_perturbation(kwargs):
+    """
+    :param kwargs: dict with keys filepath and signature_builders
+    :return:
+    """
+    filepath = kwargs.get("filepath", None)
+    signature_builders = kwargs.get("signature_builders", None)
+    tree_builder = CSVTreeBuilder()
+    perturbation_results = MulticoreResult()
+    try:
+        tree = tree_builder.build(filepath)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
+        for signature_builder in signature_builders:
+            diamonds = {}
+            node_signatures = set()
+            signature = signature_builder()
+            for node in tree.node_iter():
+                current_signature = signature.get_signature(node, node.parent())
+                node_signatures.add(current_signature[0])
+                diamond = diamonds.setdefault(current_signature[0], {})
+                diamond.setdefault("signatures", set()).add(current_signature[1])
+                diamond.setdefault("nodes", set()).add(node)
+            diamonds = {key: diamond for key, diamond in diamonds.items() if
+                        len(diamond.get("signatures", set())) > 1}
+            diamond_perturbation = {}
+            for diamond_key, diamond in diamonds.items():
+                # found a diamond
+                result = diamond_perturbation.setdefault(diamond_key, {"factor": 1, "nested": 0, "nodes": set()})
+                result["factor"] *= len(diamond.get("signatures", set()))
+                for node in diamond.get("nodes"):
+                    to_check = set(node.children_list())
+                    result["nodes"].add(node)
+                    while to_check:
+                        child = to_check.pop()
+                        child_signatures = signature.get_signature(child, child.parent())
+                        if child_signatures[0] not in diamonds:
+                            # child is only node, not diamond, so also take care on its children
+                            result["nodes"].add(child)
+                            to_check.update(child.children_list())
+                        else:
+                            # take care that the diamond is initialised as nested diamond
+                            diamond_perturbation[child_signatures[0]] = {
+                                "factor": result["factor"],
+                                "nested": result["nested"] + 1,
+                                "nodes": set()
+                            }
+            diamond_count = len(diamond_perturbation)
+
+            perturbations = [(diamond.get("factor", 2) - 1) * len(diamond.get(
+                "nodes", [])) for diamond in diamond_perturbation.values()]
+            perturbation_result = perturbation_results.setdefault(
+                signature._signatures[0]._height, {}).setdefault(diamond_count, {})
+            perturbation_result.setdefault("perturbations", []).append(sum(perturbations))
+            perturbation_result.setdefault("node_counts", []).append(len(node_signatures))
+            perturbation_result.setdefault("raw", []).append({key: {
+                "factor": value["factor"],
+                "nested": value["nested"],
+                "nodes": len(value["nodes"])} for key, value in diamond_perturbation.items()})
+    return perturbation_results
 
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
