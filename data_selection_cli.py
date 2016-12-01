@@ -379,8 +379,9 @@ def _data_by_tme(filename):
     except (DataNotInCacheException, TreeInvalidatedException):
         pass
     else:
-        node = next(tree.node_iter())
-        results.setdefault(node.tme, []).append(filename)
+        if tree is not None:
+            node = next(tree.node_iter())
+            results.setdefault(node.tme, []).append(filename)
     return results
 
 
@@ -392,11 +393,12 @@ def _data_by_uid(filename):
     except (DataNotInCacheException, TreeInvalidatedException):
         pass
     else:
-        uids = set()
-        for node in tree.node_iter():
-            if node.uid not in uids:
-                uids.add(node.uid)
-                results.setdefault(node.uid, []).append(filename)
+        if tree is not None:
+            uids = set()
+            for node in tree.node_iter():
+                if node.uid not in uids:
+                    uids.add(node.uid)
+                    results.setdefault(node.uid, []).append(filename)
     return results
 
 
@@ -406,9 +408,7 @@ def _valid_tree(filename):
         tree = tree_builder.build(filename)
         if tree:
             return filename
-    except DataNotInCacheException:
-        pass
-    except TreeInvalidatedException:
+    except (DataNotInCacheException, TreeInvalidatedException):
         pass
 
 
