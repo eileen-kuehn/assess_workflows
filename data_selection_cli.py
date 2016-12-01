@@ -76,8 +76,7 @@ def index_valid_trees(ctx, paths, pcount):
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
 def index_data_by_tme(ctx, paths, pcount):
-    results = {}
-    result_list = []
+    results = MulticoreResult()
     filenames = []
     for path in paths:
         filenames.extend(glob.glob("%s/*/*-process.csv" % path))
@@ -87,12 +86,11 @@ def index_data_by_tme(ctx, paths, pcount):
             target=_data_by_tme,
             data=filenames
         )
+        for result in result_list:
+            results += result
     else:
         for filename in filenames:
-            result_list.append(_data_by_tme(filename))
-    for result in result_list:
-        for tme in result:
-            results.setdefault(tme, []).extend(result.get(tme, []))
+            results += _data_by_tme(filename)
 
     output_results(
         ctx=ctx,
@@ -374,10 +372,13 @@ def _line_count(filename):
 
 
 def _data_by_tme(filename):
-    results = {}
+    results = MulticoreResult()
     tree_builder = CSVTreeBuilder()
-    tree = tree_builder.build(filename)
-    if tree is not None:
+    try:
+        tree = tree_builder.build(filename)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
         node = next(tree.node_iter())
         results.setdefault(node.tme, []).append(filename)
     return results
