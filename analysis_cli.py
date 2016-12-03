@@ -39,6 +39,76 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
     ctx.obj["configurations"] = configdict.configurations
 
 
+def _analyse_compression(kwargs):
+    filepath = kwargs.get("filepath", None)
+    node_count = kwargs.get("node_count", None)
+    signature_builders = kwargs.get("signature_builders", None)
+    result = MulticoreResult()
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filepath)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
+        if tree is not None:
+            for signature_builder in signature_builders:
+                signature = signature_builder()
+                compression = [set() for _ in range(signature.count)]
+                for node in tree.node_iter():
+                    identities = signature.get_signature(node, node.parent())
+                    for index, identity in enumerate(identities):
+                        compression[index].add(identity)
+                # write results
+                # {node_count: {signature_1: value, signature_2: value}}
+                current = result.setdefault(node_count, {})
+                for index, single_signature in enumerate(signature._signatures):
+                    current.setdefault(repr(single_signature), []).append(len(compression[index]))
+    return result
+
+
+@click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def analyse_compression(ctx, pcount):
+    results = MulticoreResult()
+    ctx.obj["json"] = True
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        signature_builders = ctx.obj.get("configurations", [{}])[0].get("signatures", [])
+
+        with open(file_path, "r") as input_file:
+            analysis_files = json.load(input_file).get("data", None)
+            if pcount > 1:
+                data = [{
+                    "node_count": node_count,
+                    "filepath": tree_path[0],
+                    "signature_builders": signature_builders} for node_count, tree_paths in
+                        analysis_files.items() for tree_path in tree_paths]
+                multicore_results = do_multicore(
+                    count=pcount,
+                    target=None,
+                    data=data
+                )
+                for result in multicore_results:
+                    results += result
+            else:
+                for node_count, tree_paths in analysis_files.items():
+                    for tree_path in tree_paths:
+                        results += _analyse_compression({
+                            "node_count": node_count,
+                            "filepath": tree_path[0],
+                            "signature_builders": signature_builders
+                        })
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "analyse_compression")
+    )
+
+
 @click.command()
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
@@ -288,6 +358,7 @@ def _analyse_diamonds(kwargs):
                 current_result.setdefault("files", []).append(filepath)
     return result
 
+cli.add_command(analyse_compression)
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
 cli.add_command(analyse_diamond_perturbations)
