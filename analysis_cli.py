@@ -87,7 +87,7 @@ def analyse_compression(ctx, pcount):
                         analysis_files.items() for tree_path in tree_paths]
                 multicore_results = do_multicore(
                     count=pcount,
-                    target=None,
+                    target=_analyse_compression,
                     data=data
                 )
                 for result in multicore_results:
