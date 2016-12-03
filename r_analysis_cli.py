@@ -33,6 +33,71 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
 
 @click.command()
 @click.pass_context
+def analyse_compression(ctx):
+    structure = ctx.obj.get("structure")
+
+    if ctx.obj.get("use_input", False):
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            from rpy2.robjects.packages import importr
+            from rpy2.robjects.lib.dplyr import DataFrame
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+
+            grdevices = importr("grDevices")
+            datatable = importr("data.table")
+            base = importr("base")
+
+            input_data = json.load(input_file).get("data", None)
+            result_dt = None
+            for node_count, signature_values in input_data.items():
+                for signature, compression_values in signature_values.items():
+                    current_dt = datatable.data_table(
+                        signature=signature,
+                        node_count=base.as_integer(node_count),
+                        compression=base.unlist(compression_values)
+                    )
+                    if result_dt is None:
+                        result_dt = current_dt
+                    else:
+                        result_dt = datatable.rbindlist([result_dt, current_dt])
+            # summarize data table
+            summarized_values = (DataFrame(result_dt)
+                                 .group_by("signature", "node_count")
+                                 .summarize(compression_mean="mean(compression)",
+                                            relative_compression_mean="mean(compression/node_count)",
+                                            compression_stderror="sd(compression)/sqrt(length(compression))",
+                                            relative_compression_stderror="sd(compression/node_count)/sqrt(length(compression))"))
+            absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="node_count", y="compression_mean", color="signature") + \
+                ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="compression_mean-compression_stderror",
+                ymax="compression_mean+compression_stderror")
+            relative_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
+                x="node_count", y="relative_compression_mean", color="signature") + \
+                ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+                ymin="relative_compression_mean-relative_compression_stderror",
+                ymax="relative_compression_mean+relative_compression_stderror")
+            absolute_filename = os.path.join(structure.exploratory_path(), "absolute_compression.png")
+            relative_filename = os.path.join(structure.exploratory_path(), "relative_compression.png")
+            for file_name, plot in {absolute_filename: absolute_plot,
+                                    relative_filename: relative_plot}.items():
+                grdevices.png(file_name)
+                plot.plot()
+                grdevices.dev_off()
+
+            if ctx.obj.get("save", False):
+                # save model data for further adaptations
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
+                    relative_plot=relative_plot, absolute_filename=absolute_filename,
+                    relative_filename=relative_filename, summarized_values=summarized_values,
+                    result_dt=result_dt
+                )
+
+
+@click.command()
+@click.pass_context
 def analyse_diamond_perturbations(ctx):
     structure = ctx.obj.get("structure")
 
@@ -468,6 +533,7 @@ def _distance_and_statistic(base_statistic, distribution_values):
         current_statistic.add(value)
     return distance, current_statistic
 
+cli.add_command(analyse_compression)
 cli.add_command(analyse_diamonds)
 cli.add_command(analyse_diamond_perturbations)
 cli.add_command(analyse_diamond_level)
