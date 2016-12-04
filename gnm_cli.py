@@ -43,6 +43,15 @@ def prepare_raw_data(ctx, paths, output_path, pcount):
         _prepare_raw_data(data[0])
 
 
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--output-path", "output_path", multiple=False, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def create_payloads(ctx, paths, output_path, pcount):
+    pass
+
+
 def _prepare_raw_data(kwargs):
     """
     Method processes raw data from a given path and saves results to a given output_path.
@@ -60,15 +69,6 @@ def _prepare_raw_data(kwargs):
         for traffic in data_source.traffics(
                 source="raw", path=path, data_path=output_path, stateful=True):
             data_source.write_traffic(data=traffic, path=output_path)
-
-
-@click.command()
-@click.option("--paths", "paths", multiple=True, required=True)
-@click.option("--output-path", "output_path", multiple=False, required=True)
-@click.option("--pcount", "pcount", type=int, default=1)
-@click.pass_context
-def create_payloads(ctx, paths, output_path, pcount):
-    pass
 
 cli.add_command(prepare_raw_data)
 cli.add_command(create_payloads)
