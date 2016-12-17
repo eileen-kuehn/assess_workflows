@@ -281,7 +281,9 @@ def _analyse_diamond_perturbation(kwargs):
                 diamonds = {}
                 node_signatures = set()
                 signature = signature_builder()
+                node_count = 0
                 for node in tree.node_iter():
+                    node_count += 1
                     current_signature = signature.get_signature(node, node.parent())
                     node_signatures.add(current_signature[0])
                     diamond = diamonds.setdefault(current_signature[0], {})
@@ -291,36 +293,35 @@ def _analyse_diamond_perturbation(kwargs):
                             len(diamond.get("signatures", set())) > 1}
                 diamond_perturbation = {}
                 for diamond_key, diamond in diamonds.items():
-                    # found a diamond
-                    result = diamond_perturbation.setdefault(diamond_key, {"factor": 1, "nested": 0, "nodes": set()})
-                    result["factor"] *= len(diamond.get("signatures", set()))
+                    # found a diamond, that represents several diamond nodes
+                    result = diamond_perturbation.setdefault(diamond_key, {"nested": 0, "nodes": set()})
+                    result["level"] = len(diamond.get("signatures", set()))
                     for node in diamond.get("nodes"):
                         to_check = set(node.children_list())
                         result["nodes"].add(node)
                         while to_check:
                             child = to_check.pop()
+                            result["nodes"].add(child)
                             child_signatures = signature.get_signature(child, child.parent())
-                            if child_signatures[0] not in diamonds:
-                                # child is only node, not diamond, so also take care on its children
-                                result["nodes"].add(child)
-                                to_check.update(child.children_list())
-                            else:
-                                # take care that the diamond is initialised as nested diamond
+                            to_check.update(child.children_list())
+                            if child_signatures[0] in diamonds:
+                                # diamond is a nested diamond, so initialise it here
                                 diamond_perturbation[child_signatures[0]] = {
-                                    "factor": result["factor"],
+                                    "level": 1,
                                     "nested": result["nested"] + 1,
                                     "nodes": set()
                                 }
                 diamond_count = len(diamond_perturbation)
 
-                perturbations = [(diamond.get("factor", 2) - 1) * len(diamond.get(
-                    "nodes", [])) for diamond in diamond_perturbation.values()]
+                perturbations = [len(diamond.get("nodes", [])) for diamond in
+                                 diamond_perturbation.values()]
                 perturbation_result = perturbation_results.setdefault(
                     signature._signatures[0]._height, {}).setdefault(diamond_count, {})
                 perturbation_result.setdefault("perturbations", []).append(sum(perturbations))
-                perturbation_result.setdefault("node_counts", []).append(len(node_signatures))
+                perturbation_result.setdefault("signature_counts", []).append(len(node_signatures))
+                perturbation_result.setdefault("node_counts", []).append(node_count)
                 perturbation_result.setdefault("raw", []).append({key: {
-                    "factor": value["factor"],
+                    "level": value["level"],
                     "nested": value["nested"],
                     "nodes": len(value["nodes"])} for key, value in diamond_perturbation.items()})
     return perturbation_results
