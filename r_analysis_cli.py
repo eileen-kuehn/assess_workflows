@@ -263,7 +263,11 @@ def analyse_diamonds(ctx):
             summarized_pvalues = (DataFrame(result_dt)
                                   .group_by("p_value")
                                   .summarize(diamond_mean="mean(diamonds)",
+                                             diamond_min="min(diamonds)",
+                                             diamond_max="max(diamonds)",
                                              relative_diamond_mean="mean(diamonds/identity_count)",
+                                             relative_diamond_min="min(diamonds/identity_count)",
+                                             relative_diamond_max="max(diamonds/identity_count)",
                                              diamond_stderror="sd(diamonds)/sqrt(length(diamonds))",
                                              relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))"))
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
@@ -276,14 +280,18 @@ def analyse_diamonds(ctx):
                 ymin="relative_diamond_mean-relative_diamond_stderror",
                 ymax="relative_diamond_mean+relative_diamond_stderror")
             absolute_pplot = ggplot2.ggplot(summarized_pvalues) + ggplot2.aes_string(
-                x="p_value", y="diamond_mean") + ggplot2.geom_point() + ggplot2.geom_errorbar(
+                x="p_value", y="diamond_mean") + ggplot2.geom_ribbon(ggplot2.aes_string(
+                ymin="diamond_min", ymax="diamond_max"), fill="green", alpha=.4) + \
+                             ggplot2.geom_point() + ggplot2.geom_errorbar(
                 width=.01) + ggplot2.aes_string(ymin="diamond_mean-diamond_stderror",
                                                 ymax="diamond_mean+diamond_stderror")
             relative_pplot = ggplot2.ggplot(summarized_pvalues) + ggplot2.aes_string(
-                x="p_value", y="relative_diamond_mean") + ggplot2.geom_point() + \
-                ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
-                ymin="relative_diamond_mean-relative_diamond_stderror",
-                ymax="relative_diamond_mean+relative_diamond_stderror")
+                x="p_value", y="relative_diamond_mean") + ggplot2.geom_ribbon(ggplot2.aes_string(
+                ymin="relative_diamond_min", ymax="relative_diamond_max"), fill="green", alpha=.4) + \
+                             ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + \
+                             ggplot2.aes_string(
+                                 ymin="relative_diamond_mean-relative_diamond_stderror",
+                                 ymax="relative_diamond_mean+relative_diamond_stderror")
             absolute_filename = os.path.join(structure.exploratory_path(), "pcount_diamonds.png")
             relative_filename = os.path.join(structure.exploratory_path(), "pcount_relative_diamonds.png")
             absolute_pfilename = os.path.join(structure.exploratory_path(), "pcount.png")
