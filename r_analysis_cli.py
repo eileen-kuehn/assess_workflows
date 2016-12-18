@@ -180,13 +180,14 @@ def analyse_diamond_level(ctx):
             grdevices = importr("grDevices")
             base = importr("base")
             datatable = importr("data.table")
+            brewer = importr("RColorBrewer")
 
             input_data = json.load(input_file).get("data", None)
             result_dt = None
             for node_count, p_value_list in input_data.items():
                 for p_value in p_value_list:
                     current_result = datatable.data_table(
-                        p_value=base.as_factor(p_value),
+                        p_value=base.as_integer(p_value),
                         level=robjects.IntVector([value for elem in p_value_list[p_value].get(
                             "raw", [0]) for value in elem] or [0])
                     )
@@ -194,8 +195,18 @@ def analyse_diamond_level(ctx):
                         result_dt = current_result
                     else:
                         result_dt = datatable.rbindlist([result_dt, current_result])
-            plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="p_value", y="level") + \
-                   ggplot2.geom_boxplot()
+            robjects.r("""
+            complete_count <- function(data) {
+                require(data.table)
+                result <- setkey(data, p_value, level)[CJ(unique(p_value), unique(level)), .N, by=.EACHI]
+            }
+            """)
+            complete_count = robjects.r["complete_count"]
+            tmp_dt = complete_count(result_dt)
+            plot = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(
+                x="as.factor(p_value)", y="as.factor(level)", fill="N") + ggplot2.geom_tile(
+                color="white", size=.1) + ggplot2.coord_equal() + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             plot_filename = os.path.join(structure.exploratory_path(), "diamond_level.png")
             grdevices.png(plot_filename)
             plot.plot()
@@ -206,7 +217,7 @@ def analyse_diamond_level(ctx):
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 output_r_data(
                     ctx=ctx, filename=rdata_filename, plot=plot, plot_filename=plot_filename,
-                    result_dt=result_dt)
+                    result_dt=result_dt, tmp_dt=tmp_dt)
 
 
 @click.command()
