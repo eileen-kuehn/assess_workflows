@@ -128,14 +128,24 @@ def index_data_by_uid(ctx, paths, pcount):
 
 
 @click.command()
-@click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--paths", "paths", multiple=True)
 @click.pass_context
 def index_data_by_number_of_nodes(ctx, paths):
     results = {}
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            paths = list(paths)
+            paths.extend(json.load(input_file)["data"])
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            count = _line_count(filename)
-            results.setdefault(count, []).append(filename)
+        if not os.path.isfile(path):
+            for filename in glob.glob("%s/*/*-process.csv" % path):
+                count = _line_count(filename)
+                results.setdefault(count, []).append(filename)
+        else:
+            count = _line_count(path)
+            results.setdefault(count, []).append(path)
 
     output_results(
         ctx=ctx,
