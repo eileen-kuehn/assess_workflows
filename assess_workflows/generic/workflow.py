@@ -64,7 +64,8 @@ class Workflow(object):
             name="Finalising %s" % (name or reference or current_step)
         )
 
-    def prepare_intermediate_as_input(self, from_step=None, reference=None, name=None):
+    def prepare_intermediate_as_input(self, from_step=None, reference=None, name=None,
+                                      file_type="json"):
         """
         Convenience function that encapsulates the copy process from intermediate results from
         last step to prepare for next step.
@@ -82,7 +83,8 @@ class Workflow(object):
             cmd="intermediate_as_input",
             from_step=target or from_step or (current_step - 1),
             to_step=current_step + 1,
-            name="Preparing %s for %s" % ((name or reference or from_step), current_step + 1)
+            name="Preparing %s for %s" % ((name or reference or from_step), current_step + 1),
+            file_type=file_type
         )
 
     def execute(self, environment_variables=None, start=0, end=None):
