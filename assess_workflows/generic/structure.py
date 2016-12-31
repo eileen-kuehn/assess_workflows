@@ -101,8 +101,8 @@ class Structure(object):
                                 (step or self.step, variant, file_type))
         return os.path.join(self.intermediate_path(name), "output_%d.%s" % (step or self.step, file_type))
 
-    def input_file_path(self, name=None, step=None):
-        return os.path.join(self.input_path(name), "input_%d.json" % (step or self.step))
+    def input_file_path(self, name=None, step=None, file_type="json"):
+        return os.path.join(self.input_path(name), "input_%d.%s" % (step or self.step, file_type))
 
     def final_file_path(self, name=None, step=None, file_type="json"):
         return os.path.join(self.final_path(name), "%s_final_%d.%s" %
