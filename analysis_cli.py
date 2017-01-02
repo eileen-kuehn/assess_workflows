@@ -329,6 +329,33 @@ def _analyse_diamond_perturbation(kwargs):
 
 def _analyse_diamonds(kwargs):
     """
+    Method expects an ensemble signature in configuration were signature at position 0 has length
+    n - 1 whereas signature at position 1 has length n (criterium for diamonds). It then builds
+    a dictionary for given signatures from position 0 and builds a collection from signatures at
+    position 1. The number of signatures that are associated to the different keys is then relevant
+    to determine the diamonds. When more than one signature is assigned, then we got a diamond.
+
+    Method creates different fields in output file:
+
+    * raw: contains the levels of the diamonds within a given tree
+    * identities: number of identities for the whole tree
+    * diamonds: number of diamonds within the tree (independent from level)
+    * files: files that were used
+
+    In addition, all of these fields are associated to a given signature_builder. It defines the
+    actual height that is analysed. Meaning, the p value that is used to index the output file.
+
+    {
+        node_count: {
+            p_value: {
+                "raw": [[diamond levels], ...],
+                "identities": [identity_count, ...],
+                "diamonds": [diamond_count, ...],
+                "files": [file_path, ...]
+            }
+        }
+    }
+
     :param kwargs: dict containing keys node_count, filepath and signature_builders
     :return:
     """
