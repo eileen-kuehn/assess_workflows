@@ -119,8 +119,12 @@ def analyse_diamond_perturbations(ctx):
                     current_dt = datatable.data_table(
                         p_value=p_count,
                         diamond_count=base.as_integer(diamond_count),
-                        perturbation=base.unlist(diamond_samples.get("perturbations")),
-                        identity_count=base.unlist(diamond_samples.get("node_counts"))
+                        profile_distortion=base.unlist(diamond_samples.get("profile_distortions")),
+                        profile_distortion_signatures=base.unlist(diamond_samples.get("profile_distortions_signatures")),
+                        distance_error=base.unlist(diamond_samples.get("distance_errors")),
+                        distance_error_signatures=base.unlist(diamond_samples.get("distance_errors_signatures")),
+                        node_count=base.unlist(diamond_samples.get("node_counts")),
+                        signature_count=base.unlist(diamond_samples.get("signature_counts"))
                     )
                     if result_dt is None:
                         result_dt = current_dt
@@ -129,27 +133,55 @@ def analyse_diamond_perturbations(ctx):
             # summarize data table
             summarized_values = (DataFrame(result_dt)
                                  .group_by("p_value", "diamond_count")
-                                 .summarize(perturbation_mean="mean(perturbation)",
-                                            relative_perturbation_mean="mean(perturbation/identity_count)",
-                                            perturbation_stderror="sd(perturbation)/sqrt(length(perturbation))",
-                                            relative_perturbation_stderror="sd(perturbation/identity_count)/sqrt(length(perturbation))"))
-            absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="diamond_count", y="perturbation_mean", color="p_value") + \
-                ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
-                ymin="perturbation_mean-perturbation_stderror",
-                ymax="perturbation_mean+perturbation_stderror")
-            relative_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="diamond_count", y="relative_perturbation_mean", color="p_value") + \
-                ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
-                ymin="relative_perturbation_mean-relative_perturbation_stderror",
-                ymax="relative_perturbation_mean+relative_perturbation_stderror")
-            absolute_filename = os.path.join(structure.exploratory_path(),
-                                                  "perturbation_diamonds.png")
-            relative_filename = os.path.join(structure.exploratory_path(),
-                                                           "perturbation_relative_diamonds.png")
+                                 .summarize(profile_distortion_mean="mean(profile_distortion)",
+                                            profile_distortion_signatures_mean="mean(profile_distortion_signatures)",
+                                            distance_error_mean="mean(distance_error)",
+                                            distance_error_signatures_mean="mean(distance_error_signatures)",
+                                            relative_profile_distortion_mean="mean(profile_distortion/node_count)",
+                                            relative_profile_distortion_signatures_mean="mean(profile_distortion_signatures/signature_count)",
+                                            relative_distance_error_mean="mean(distance_error/node_count)",
+                                            relative_distance_error_signatures_mean="mean(distance_error_signatures/signature_count)",
+                                            profile_distortion_stderror="sd(profile_distortion)/sqrt(length(profile_distortion))",
+                                            profile_distortion_signatures_stderror="sd(profile_distortion_signatures)/sqrt(length(profile_distortion_signatures))",
+                                            distance_error_stderror="sd(distance_error)/sqrt(length(distance_error))",
+                                            distance_error_signatures_stderror="sd(distance_error_signatures)/sqrt(length(distance_error_signatures))",
+                                            relative_profile_distortion_stderror="sd(profile_distortion/node_count)/sqrt(length(profile_distortion))",
+                                            relative_profile_distortion_signatures_stderror="sd(profile_distortion_signatures/signature_count)/sqrt(length(profile_distortion_signatures))",
+                                            relative_distance_error_stderror="sd(distance_error/node_count)/sqrt(length(distance_error))",
+                                            relative_distance_error_signatures_stderror="sd(distance_error_signatures/node_count)/sqrt(length(distance_error_signatures))"))
+            absolute_profile_distortion_plot = _diamond_perturbation_plot(
+                summarized_values, "profile_distortion_mean", "profile_distortion_stderror")
+            absolute_profile_distortion_filename = os.path.join(structure.exploratory_path(), "profile_distortion.png")
+            relative_profile_distortion_plot = _diamond_perturbation_plot(
+                summarized_values, "relative_profile_distortion_mean", "relative_profile_distortion_stderror")
+            relative_profile_distortion_filename = os.path.join(structure.exploratory_path(), "relative_profile_distortion.png")
+            absolute_profile_distortion_signatures_plot = _diamond_perturbation_plot(
+                summarized_values, "profile_distortion_signatures_mean", "profile_distortion_signatures_stderror")
+            absolute_profile_distortion_signatures_filename = os.path.join(structure.exploratory_path(), "profile_distortion_signatures.png")
+            relative_profile_distortion_signatures_plot = _diamond_perturbation_plot(
+                summarized_values, "relative_profile_distortion_signatures_mean", "relative_profile_distortion_signatures_stderror")
+            relative_profile_distortion_signatures_filename = os.path.join(structure.exploratory_path(), "relative_profile_distortion_signatures.png")
+            absolute_distance_error_plot = _diamond_perturbation_plot(
+                summarized_values, "distance_error_mean", "distance_error_stderror")
+            absolute_distance_error_filename = os.path.join(structure.exploratory_path(), "distance_error.png")
+            relative_distance_error_plot = _diamond_perturbation_plot(
+                summarized_values, "relative_distance_error_mean", "relative_distance_error_stderror")
+            relative_distance_error_filename = os.path.join(structure.exploratory_path(), "relative_distance_error.png")
+            absolute_distance_error_signatures_plot = _diamond_perturbation_plot(
+                summarized_values, "distance_error_signatures_mean", "distance_error_signatures_stderror")
+            absolute_distance_error_signatures_filename = os.path.join(structure.exploratory_path(), "distance_error_signatures.png")
+            relative_distance_error_signatures_plot = _diamond_perturbation_plot(
+                summarized_values, "relative_distance_error_signatures_mean", "relative_distance_error_signatures_stderror")
+            relative_distance_error_signatures_filename = os.path.join(structure.exploratory_path(), "relative_distance_error_signatures.png")
 
-            for file_name, plot in {absolute_filename: absolute_plot,
-                                    relative_filename: relative_plot}.items():
+            for file_name, plot in {absolute_profile_distortion_filename: absolute_profile_distortion_plot,
+                                    relative_profile_distortion_filename: relative_profile_distortion_plot,
+                                    absolute_profile_distortion_signatures_filename: absolute_profile_distortion_signatures_plot,
+                                    relative_profile_distortion_signatures_filename: relative_profile_distortion_signatures_plot,
+                                    absolute_distance_error_filename: absolute_distance_error_plot,
+                                    relative_distance_error_filename: relative_distance_error_plot,
+                                    absolute_distance_error_signatures_filename: absolute_distance_error_signatures_plot,
+                                    relative_distance_error_signatures_filename: relative_distance_error_signatures_plot}.items():
                 grdevices.png(file_name)
                 plot.plot()
                 grdevices.dev_off()
@@ -158,11 +190,33 @@ def analyse_diamond_perturbations(ctx):
                 # save model data for further adaptations
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 output_r_data(
-                    ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
-                    relative_plot=relative_plot, absolute_filename=absolute_filename,
-                    relative_filename=relative_filename, summarized_values=summarized_values,
-                    result_dt=result_dt
+                    ctx=ctx, filename=rdata_filename,
+                    absolute_profile_distortion_plot=absolute_profile_distortion_plot,
+                    absolute_profile_distortion_filename=absolute_profile_distortion_filename,
+                    relative_profile_distortion_plot=relative_profile_distortion_plot,
+                    relative_profile_distortion_filename=relative_profile_distortion_filename,
+                    absolute_profile_distortion_signatures_plot=absolute_profile_distortion_signatures_plot,
+                    absolute_profile_distortion_signatures_filename=absolute_profile_distortion_signatures_filename,
+                    relative_profile_distortion_signatures_plot=relative_profile_distortion_signatures_plot,
+                    relative_profile_distortion_signatures_filename=relative_profile_distortion_signatures_filename,
+                    absolute_distance_error_plot=absolute_distance_error_plot,
+                    absolute_distance_error_filename=absolute_distance_error_filename,
+                    relative_distance_error_plot=relative_distance_error_plot,
+                    relative_distance_error_filename=relative_distance_error_filename,
+                    absolute_distance_error_signatures_plot=absolute_distance_error_signatures_plot,
+                    absolute_distance_error_signatures_filename=absolute_distance_error_signatures_filename,
+                    relative_distance_error_signatures_plot=relative_distance_error_signatures_plot,
+                    relative_distance_error_signatures_filename=relative_distance_error_signatures_filename,
+                    summarized_values=summarized_values, result_dt=result_dt
                 )
+
+
+def _diamond_perturbation_plot(data, mean, stderror):
+    import rpy2.robjects.lib.ggplot2 as ggplot2
+    return ggplot2.ggplot(data) + ggplot2.aes_string(
+        x="diamond_count", y="%s" % mean, color="p_value") + ggplot2.geom_point() + \
+        ggplot2.geom_errorbar(width=.01) + \
+        ggplot2.aes_string(ymin="%s-%s" % (mean, stderror), ymax="%s+%s" % (mean, stderror))
 
 
 @click.command()
