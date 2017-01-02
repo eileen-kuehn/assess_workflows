@@ -152,6 +152,24 @@ def analyse_diamond_perturbations(ctx, pcount):
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
 def analyse_diamonds(ctx, pcount):
+    """
+    Method returns output file that follows the following format:
+
+    {
+        node_count: {
+            p_value: {
+                "raw": [[diamond levels], ...],
+                "identities": [identity_count, ...],
+                "diamonds": [diamond_count, ...],
+                "files": [file_path, ...]
+            }
+        }
+    }
+
+    :param ctx:
+    :param pcount:
+    :return:
+    """
     results = MulticoreResult()
     ctx.obj["json"] = True
     if ctx.obj.get("use_input", False):
