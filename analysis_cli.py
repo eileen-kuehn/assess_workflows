@@ -367,10 +367,10 @@ def _analyse_diamond_perturbation(kwargs):
                          for diamond in diamond_perturbation.values()])
                 )
                 perturbation_result.setdefault("distance_errors", []).append(
-                    sum([len(diamond.get("nodes", [])) for diamond in diamond_perturbation])
+                    sum([len(diamond.get("nodes", [])) for diamond in diamond_perturbation.values()])
                 )
                 perturbation_result.setdefault("distance_errors_signatures", []).append(
-                    sum([len(diamond.get("signatures", [])) for diamond in diamond_perturbation])
+                    sum([len(diamond.get("signatures", [])) for diamond in diamond_perturbation.values()])
                 )
                 perturbation_result.setdefault("signature_counts", []).append(len(node_signatures))
                 perturbation_result.setdefault("node_counts", []).append(node_count)
