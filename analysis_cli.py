@@ -395,6 +395,7 @@ def _analyse_diamonds(kwargs):
     * raw: contains the levels of the diamonds within a given tree
     * identities: number of identities for the whole tree
     * diamonds: number of diamonds within the tree (independent from level)
+    * diamond_nodes: number of nodes that make up the diamonds
     * files: files that were used
 
     In addition, all of these fields are associated to a given signature_builder. It defines the
@@ -403,9 +404,14 @@ def _analyse_diamonds(kwargs):
     {
         node_count: {
             p_value: {
-                "raw": [[diamond levels], ...],
+                "raw": {
+                    "levels": [[diamond level, ...], ...],
+                    "nodes": [[diamond nodes, ...], ...]
+                }
                 "identities": [identity_count, ...],
                 "diamonds": [diamond_count, ...],
+                "diamond_nodes": [diamond_node_count, ...],
+                "node_counts": [node_count, ...],
                 "files": [file_path, ...]
             }
         }
@@ -428,16 +434,28 @@ def _analyse_diamonds(kwargs):
             for signature_builder in signature_builders:
                 signature = signature_builder()
                 node_dict = {}
+                current_node_count = 0
                 for node in tree.node_iter():
+                    current_node_count += 1
                     current_signatures = signature.get_signature(node, node.parent())
-                    node_dict.setdefault(current_signatures[0], set()).add(current_signatures[1])
-                diamond_values = [len(signatures) - 1 for signatures in node_dict.values() if
-                                  len(signatures) > 1]
+                    current_node = node_dict.setdefault(current_signatures[0], {})
+                    current_node.setdefault("nodes", set()).add(node)
+                    current_node.setdefault("signatures", set()).add(current_signatures[1])
+                diamonds = {signature: {
+                    "nodes": len(signature_values.get("nodes", set())),
+                    "levels": len(signature_values.get("signatures", set())) - 1
+                } for signature, signature_values in node_dict.items() if
+                            len(signature_values.get("signatures", set())) > 1}
                 current_result = result.setdefault(node_count, {}).setdefault(
                     signature._signatures[0]._height, {})
-                current_result.setdefault("raw", []).append(diamond_values)
+                raw_result = current_result.setdefault("raw", {"levels": [], "nodes": []})
+                raw_result["levels"].append([diamond.get("levels", 0) for diamond in diamonds.values()])
+                raw_result["nodes"].append([diamond.get("nodes", 0) for diamond in diamonds.values()])
+                current_result.setdefault("node_counts", []).append(current_node_count)
                 current_result.setdefault("identities", []).append(len(node_dict))
-                current_result.setdefault("diamonds", []).append(len(diamond_values))
+                current_result.setdefault("diamonds", []).append(len(diamonds))
+                current_result.setdefault("diamond_nodes", []).append(
+                    sum([diamond.get("nodes", 0) for diamond in diamonds.values()]))
                 current_result.setdefault("files", []).append(filepath)
     return result
 
