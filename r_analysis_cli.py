@@ -275,6 +275,22 @@ def analyse_diamond_level(ctx):
 @click.command()
 @click.pass_context
 def analyse_diamonds(ctx):
+    def _analyse_diamonds_plot(data, x_value, y_base):
+        import rpy2.robjects.lib.ggplot2 as ggplot2
+        return ggplot2.ggplot(data) + ggplot2.aes_string(x="%s" % x_value, y="%s_mean" % y_base,
+                                                         color="as.factor(p_value)") + \
+            ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+            ymin="%s_mean-%s_stderror" % (y_base, y_base), ymax="%s_mean+%s_stderror" %
+                                                                (y_base, y_base))
+
+    def _analyse_diamonds_pplot(data, x_value, y_base):
+        import rpy2.robjects.lib.ggplot2 as ggplot2
+        return ggplot2.ggplot(data) + ggplot2.aes_string(x="%s" % x_value, y="%s_mean" % y_base) + \
+            ggplot2.geom_ribbon(ggplot2.aes_string(ymin="%s_min" % y_base, ymax="%s_max" % y_base),
+                                fill="green", alpha=.4) + ggplot2.geom_point() + \
+            ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
+            ymin="%s_mean-%s_stderror" % (y_base, y_base),
+            ymax="%s_mean+%s_stderror" % (y_base, y_base))
     structure = ctx.obj.get("structure")
 
     if ctx.obj.get("use_input", False):
@@ -298,7 +314,9 @@ def analyse_diamonds(ctx):
                     current_result = datatable.data_table(
                         node_count=base.as_integer(node_count),
                         p_value=base.as_integer(p_value),
+                        current_node_count=base.as_integer(p_value_list[p_value].get("node_counts", [0])),
                         diamonds=base.unlist(p_value_list[p_value].get("diamonds", [0])),
+                        diamond_nodes=base.unlist(p_value_list[p_value].get("diamond_nodes", [0])),
                         identity_count=base.unlist(p_value_list[p_value].get("identities", [0]))
                     )
                     if result_dt is None:
@@ -309,49 +327,56 @@ def analyse_diamonds(ctx):
             summarized_values = (DataFrame(result_dt)
                                  .group_by("p_value", "node_count")
                                  .summarize(diamond_mean="mean(diamonds)",
+                                            diamond_nodes_mean="mean(diamond_nodes)",
                                             relative_diamond_mean="mean(diamonds/identity_count)",
+                                            relative_diamond_nodes_mean="mean(diamond_nodes/current_node_count)",
                                             diamond_stderror="sd(diamonds)/sqrt(length(diamonds))",
-                                            relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))"))
+                                            diamond_nodes_stderror="sd(diamond_nodes)/sqrt(length(diamond_nodes))",
+                                            relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))",
+                                            relative_diamond_nodes_stderror="sd(diamond_nodes/current_node_count)/sqrt(length(diamond_nodes))"))
             summarized_pvalues = (DataFrame(result_dt)
                                   .group_by("p_value")
                                   .summarize(diamond_mean="mean(diamonds)",
+                                             diamond_nodes_mean="mean(diamond_nodes)",
                                              diamond_min="min(diamonds)",
+                                             diamond_nodes_min="min(diamond_nodes)",
                                              diamond_max="max(diamonds)",
+                                             diamond_nodes_max="max(diamond_nodes)",
                                              relative_diamond_mean="mean(diamonds/identity_count)",
+                                             relative_diamond_nodes_mean="mean(diamond_nodes/current_node_count)",
                                              relative_diamond_min="min(diamonds/identity_count)",
+                                             relative_diamond_nodes_min="min(diamond_nodes/current_node_count)",
                                              relative_diamond_max="max(diamonds/identity_count)",
+                                             relative_diamond_nodes_max="max(diamond_nodes/current_node_count)",
                                              diamond_stderror="sd(diamonds)/sqrt(length(diamonds))",
-                                             relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))"))
-            absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="node_count", y="diamond_mean", color="as.factor(p_value)") + ggplot2.geom_point() + \
-                ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
-                ymin="diamond_mean-diamond_stderror", ymax="diamond_mean+diamond_stderror")
-            relative_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
-                x="node_count", y="relative_diamond_mean", color="as.factor(p_value)") + \
-                ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
-                ymin="relative_diamond_mean-relative_diamond_stderror",
-                ymax="relative_diamond_mean+relative_diamond_stderror")
-            absolute_pplot = ggplot2.ggplot(summarized_pvalues) + ggplot2.aes_string(
-                x="p_value", y="diamond_mean") + ggplot2.geom_ribbon(ggplot2.aes_string(
-                ymin="diamond_min", ymax="diamond_max"), fill="green", alpha=.4) + \
-                             ggplot2.geom_point() + ggplot2.geom_errorbar(
-                width=.01) + ggplot2.aes_string(ymin="diamond_mean-diamond_stderror",
-                                                ymax="diamond_mean+diamond_stderror")
-            relative_pplot = ggplot2.ggplot(summarized_pvalues) + ggplot2.aes_string(
-                x="p_value", y="relative_diamond_mean") + ggplot2.geom_ribbon(ggplot2.aes_string(
-                ymin="relative_diamond_min", ymax="relative_diamond_max"), fill="green", alpha=.4) + \
-                             ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + \
-                             ggplot2.aes_string(
-                                 ymin="relative_diamond_mean-relative_diamond_stderror",
-                                 ymax="relative_diamond_mean+relative_diamond_stderror")
-            absolute_filename = os.path.join(structure.exploratory_path(), "pcount_diamonds.png")
-            relative_filename = os.path.join(structure.exploratory_path(), "pcount_relative_diamonds.png")
-            absolute_pfilename = os.path.join(structure.exploratory_path(), "pcount.png")
-            relative_pfilename = os.path.join(structure.exploratory_path(), "pcount_relative.png")
-            for filename, plot in {absolute_filename: absolute_plot,
-                                   relative_filename: relative_plot,
-                                   absolute_pfilename: absolute_pplot,
-                                   relative_pfilename: relative_pplot}.items():
+                                             diamond_nodes_stderror="sd(diamond_nodes)/sqrt(length(diamond_nodes))",
+                                             relative_diamond_stderror="sd(diamonds/identity_count)/sqrt(length(diamonds))",
+                                             relative_diamond_nodes_stderror="sd(diamond_nodes/current_node_count)/sqrt(length(diamond_nodes))"))
+            absolute_diamonds_plot = _analyse_diamonds_plot(summarized_values, "node_count", "diamond")
+            relative_diamonds_plot = _analyse_diamonds_plot(summarized_values, "node_count", "relative_diamond")
+            absolute_diamond_nodes_plot = _analyse_diamonds_plot(summarized_values, "node_count", "diamond_nodes")
+            relative_diamond_nodes_plot = _analyse_diamonds_plot(summarized_values, "node_count", "relative_diamond_nodes")
+            absolute_diamonds_pplot = _analyse_diamonds_pplot(summarized_pvalues, "p_value", "diamond")
+            relative_diamonds_pplot = _analyse_diamonds_pplot(summarized_pvalues, "p_value", "relative_diamond")
+            absolute_diamond_nodes_pplot = _analyse_diamonds_pplot(summarized_pvalues, "p_value", "diamond_nodes")
+            relative_diamond_nodes_pplot = _analyse_diamonds_pplot(summarized_pvalues, "p_value", "relative_diamond_nodes")
+
+            absolute_diamonds_filename = os.path.join(structure.exploratory_path(), "ncount_diamonds.png")
+            relative_diamonds_filename = os.path.join(structure.exploratory_path(), "ncount_relative_diamonds.png")
+            absolute_diamond_nodes_filename = os.path.join(structure.exploratory_path(), "ncount_diamond_nodes.png")
+            relative_diamond_nodes_filename = os.path.join(structure.exploratory_path(), "ncount_relative_diamond_nodes.png")
+            absolute_diamonds_pfilename = os.path.join(structure.exploratory_path(), "pcount_diamonds.png")
+            relative_diamonds_pfilename = os.path.join(structure.exploratory_path(), "pcount_relative_diamonds.png")
+            absolute_diamond_nodes_pfilename = os.path.join(structure.exploratory_path(), "pcount_diamond_nodes.png")
+            relative_diamond_nodes_pfilename = os.path.join(structure.exploratory_path(), "pcount_relative_diamond_nodes.png")
+            for filename, plot in {absolute_diamonds_filename: absolute_diamonds_plot,
+                                   relative_diamonds_filename: relative_diamonds_plot,
+                                   absolute_diamond_nodes_filename: absolute_diamond_nodes_plot,
+                                   relative_diamond_nodes_filename: relative_diamond_nodes_plot,
+                                   absolute_diamonds_pfilename: absolute_diamonds_pplot,
+                                   relative_diamonds_pfilename: relative_diamonds_pplot,
+                                   absolute_diamond_nodes_pfilename: absolute_diamond_nodes_pplot,
+                                   relative_diamond_nodes_pfilename: relative_diamond_nodes_pplot}.items():
                 grdevices.png(filename)
                 plot.plot()
                 grdevices.dev_off()
@@ -360,11 +385,23 @@ def analyse_diamonds(ctx):
                 # save model data for further adaptations
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 output_r_data(
-                    ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
-                    relative_plot=relative_plot, absolute_pplot=absolute_pplot,
-                    relative_pplot=relative_pplot, absolute_filename=absolute_filename,
-                    relative_filename=relative_filename, absolute_pfilename=absolute_pfilename,
-                    relative_pfilename=relative_pfilename, summarized_values=summarized_values,
+                    ctx=ctx, filename=rdata_filename, absolute_diamonds_plot=absolute_diamonds_plot,
+                    relative_diamonds_plot=relative_diamonds_plot,
+                    absolute_diamond_nodes_plot=absolute_diamond_nodes_plot,
+                    relative_diamond_nodes_plot=relative_diamond_nodes_plot,
+                    absolute_diamonds_pplot=absolute_diamonds_pplot,
+                    relative_diamonds_pplot=relative_diamonds_pplot,
+                    absolute_diamond_nodes_pplot=absolute_diamond_nodes_pplot,
+                    relative_diamond_nodes_pplot=relative_diamond_nodes_pplot,
+                    absolute_diamonds_filename=absolute_diamonds_filename,
+                    relative_diamonds_filename=relative_diamonds_filename,
+                    absolute_diamond_nodes_filename=absolute_diamond_nodes_filename,
+                    relative_diamond_nodes_filename=relative_diamond_nodes_filename,
+                    absolute_diamonds_pfilename=absolute_diamonds_pfilename,
+                    relative_diamonds_pfilename=relative_diamonds_pfilename,
+                    absolute_diamond_nodes_pfilename=absolute_diamond_nodes_pfilename,
+                    relative_diamond_nodes_pfilename=relative_diamond_nodes_pfilename,
+                    summarized_values=summarized_values,
                     summarized_pvalues=summarized_pvalues, result_dt=result_dt
                 )
 
