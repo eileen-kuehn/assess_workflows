@@ -99,6 +99,12 @@ def analyse_compression(ctx):
 @click.command()
 @click.pass_context
 def analyse_diamond_perturbations(ctx):
+    def _diamond_perturbation_plot(data, mean, stderror):
+        import rpy2.robjects.lib.ggplot2 as ggplot2
+        return ggplot2.ggplot(data) + ggplot2.aes_string(
+            x="diamond_count", y="%s" % mean, color="p_value") + ggplot2.geom_point() + \
+            ggplot2.geom_errorbar(width=.01) + \
+            ggplot2.aes_string(ymin="%s-%s" % (mean, stderror), ymax="%s+%s" % (mean, stderror))
     structure = ctx.obj.get("structure")
 
     if ctx.obj.get("use_input", False):
@@ -209,14 +215,6 @@ def analyse_diamond_perturbations(ctx):
                     relative_distance_error_signatures_filename=relative_distance_error_signatures_filename,
                     summarized_values=summarized_values, result_dt=result_dt
                 )
-
-
-def _diamond_perturbation_plot(data, mean, stderror):
-    import rpy2.robjects.lib.ggplot2 as ggplot2
-    return ggplot2.ggplot(data) + ggplot2.aes_string(
-        x="diamond_count", y="%s" % mean, color="p_value") + ggplot2.geom_point() + \
-        ggplot2.geom_errorbar(width=.01) + \
-        ggplot2.aes_string(ymin="%s-%s" % (mean, stderror), ymax="%s+%s" % (mean, stderror))
 
 
 @click.command()
