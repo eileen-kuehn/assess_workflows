@@ -133,6 +133,8 @@ def batch_process_from_pkl(ctx, pcount):
                 )
                 for result in result_list:
                     results["results"].append(result)
+            else:
+                raise NotImplementedError
     output_results(
         ctx=ctx,
         results=results,
