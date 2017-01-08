@@ -100,39 +100,25 @@ def batch_process_from_pkl(ctx, pcount):
                 # results are split into a header and data files
                 # see data_generation_cli.generate_perturbated_tree
                 tree_metadata = pickle.load(input_file)
-                # DATA -- TODO: do in each subprocess, for only the relevant row
-                # ######
-                # each data item is an individual multicore result
-                tree_data = MulticoreResult()
-                for key, pkl_path in tree_metadata.items():
-                    with open(pkl_path) as result_pkl:
-                        tree_data += pickle.load(result_pkl)
-                # END IO
-                # ######
                 results["files"] = tree_metadata.keys()
-                for vector_data in tree_data.values():
-                    # tree is stored in tree
-                    # distorted trees in perturbated_tree
-                    results["distance"].append([])
+                for key, pkl_path in tree_metadata.items():
+                    # tree is stored in "tree"
+                    # distorted trees in "perturbated_tree"
                     data.append({
-                        "tree": vector_data["tree"],
-                        "prototypes": [tree for trees in vector_data["perturbated_tree"].values() for tree in trees],
+                        "data_pkl_path": pkl_path,
+                        "data_pkl_key": key,
                         "configurations": ctx.obj["configurations"]
                     })
-                    precalculated_costs = {}
-                    for perturbated_trees in vector_data["perturbated_tree"].values():
-                        for perturbated_tree in perturbated_trees:
-                            # append precalculated distances
-                            for cost_model, distance in perturbated_tree.distance.items():
-                                precalculated_costs.setdefault(cost_model.__class__.__name__, []).append(distance)
-                    results["distance"][-1] = precalculated_costs
-                result_list = do_multicore(
-                    count=pcount,
-                    data=data,
-                    target=_process_configurations_for_row
+                result_list = (
+                    do_multicore(
+                        count=pcount,
+                        data=data,
+                        target=_process_configurations_for_row
+                    )
                 )
                 for result in result_list:
-                    results["results"].append(result)
+                    results["results"].append(result['results'])
+                    results["distance"].append(result['precalculated_costs'])
             else:
                 raise NotImplementedError
     output_results(
@@ -309,9 +295,20 @@ def _init_results():
 
 def _process_configurations_for_row(kwargs):
     results = []
+    precalculated_costs = {}
     with ExceptionFrame():
-        prototypes = kwargs.get("prototypes", [])
-        tree = kwargs.get("tree", None)
+        data_pkl_path = kwargs.pop('data_pkl_path')
+        data_pkl_key = kwargs.pop('data_pkl_key')
+        with open(data_pkl_path) as input_pkl:
+            raw_data = pickle.load(input_pkl)[data_pkl_key]
+        tree = raw_data['tree']
+        prototypes = [ptree for ptrees in raw_data["perturbated_tree"].values() for ptree in ptrees]
+        # extract precalculated distances
+        for perturbated_tree in prototypes:
+            # append precalculated distances
+            for cost_model, distance in perturbated_tree.distance.items():
+                precalculated_costs.setdefault(cost_model.__class__.__name__, []).append(distance)
+        # calculate actual results
         configurations = kwargs.get("configurations", {})
         for configuration in configurations:
             for algorithm_def in configuration.get("algorithms", []):
@@ -337,8 +334,8 @@ def _process_configurations_for_row(kwargs):
                             "signature": "%s" % signature,
                             "event_streamer": "%s" % GNMCSVEventStreamer(csv_path=None),
                             "decorator": decorator.descriptive_data()
-                    })
-    return results
+                        })
+    return {'results': results, 'precalculated_costs': precalculated_costs}
 
 
 def _process_configurations(prototypes, configurations, event_generator):
