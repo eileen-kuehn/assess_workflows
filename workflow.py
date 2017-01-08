@@ -6,7 +6,10 @@ import math
 import click
 import logging
 import importlib
+import cPickle as pickle
 
+from assess.exceptions.exceptions import EventNotSupportedException
+from assess.generators.event_generator import NodeGenerator
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
 
@@ -76,6 +79,51 @@ def process_as_vector(ctx, trees, representatives):
         results=results,
         version=determine_version(os.path.dirname(assess.__file__)),
         source="%s (%s)" % (__file__, "process_as_vector")
+    )
+
+
+@click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def batch_process_from_pkl(ctx, pcount):
+    results = _init_results()
+    results["distance"] = []
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path(file_type="pkl")
+        with open(file_path, "r") as input_file:
+            if pcount > 1:
+                data = []
+                tree_data = pickle.load(input_file)
+                results["files"] = tree_data.keys()
+                for vector_data in tree_data.values():
+                    # tree is stored in tree
+                    # distorted trees in perturbated_tree
+                    results["distance"].append([])
+                    data.append({
+                        "tree": vector_data["tree"],
+                        "prototypes": [tree for trees in vector_data["perturbated_tree"].values() for tree in trees],
+                        "configurations": ctx.obj["configurations"]
+                    })
+                    precalculated_costs = {}
+                    for perturbated_trees in vector_data["perturbated_tree"].values():
+                        for perturbated_tree in perturbated_trees:
+                            # append precalculated distances
+                            for cost_model, distance in perturbated_tree.distance.items():
+                                precalculated_costs.setdefault(cost_model.__class__.__name__, []).append(distance)
+                    results["distance"][-1] = precalculated_costs
+                result_list = do_multicore(
+                    count=pcount,
+                    data=data,
+                    target=_process_configurations_for_row
+                )
+                for result in result_list:
+                    results["results"].append(result)
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess.__file__)),
+        source="%s (%s)" % (__file__, "batch_process_from_pkl")
     )
 
 
@@ -243,6 +291,40 @@ def _init_results():
     }
 
 
+def _process_configurations_for_row(kwargs):
+    results = []
+    with ExceptionFrame():
+        prototypes = kwargs.get("prototypes", [])
+        tree = kwargs.get("tree", None)
+        configurations = kwargs.get("configurations", {})
+        for configuration in configurations:
+            for algorithm_def in configuration.get("algorithms", []):
+                for signature_def in configuration.get("signatures", []):
+                    signature = signature_def()
+                    algorithm = algorithm_def(signature=signature)
+                    algorithm.prototypes = prototypes
+                    decorator = None
+                    streamer = tree
+                    result = _perform_calculation(
+                        tree=streamer,
+                        algorithm=algorithm,
+                        decorator_def=configuration.get("decorator", None),
+                        maxlen=None
+                    )
+                    if decorator:
+                        decorator.update(result)
+                    else:
+                        decorator = result
+                    if decorator:
+                        results.append({
+                            "algorithm": "%s" % algorithm,
+                            "signature": "%s" % signature,
+                            "event_streamer": "%s" % GNMCSVEventStreamer(csv_path=None),
+                            "decorator": decorator.descriptive_data()
+                    })
+    return results
+
+
 def _process_configurations(prototypes, configurations, event_generator):
     """
     Method parses all different possibilities of calculations that need to be performed based
@@ -304,7 +386,10 @@ def _perform_calculation(tree, algorithm, decorator_def, maxlen=float("Inf")):
     # starting a new tree not to mix former results with current
     algorithm.start_tree(maxlen=maxlen)
     for event in tree.event_iter():
-        algorithm.add_event(event)
+        try:
+            algorithm.add_event(event)
+        except EventNotSupportedException:
+            pass
     algorithm.finish_tree()
     return decorator
 
@@ -361,6 +446,7 @@ def _initialise_prototypes(prototype_paths):
 cli.add_command(process_as_vector)
 cli.add_command(process_as_matrix)
 cli.add_command(batch_process_as_vector)
+cli.add_command(batch_process_from_pkl)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
