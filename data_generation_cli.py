@@ -2,6 +2,8 @@ import json
 import click
 import random
 import logging
+import hashlib
+import time
 import cPickle as pickle
 
 from assess.generators.gnm_importer import CSVTreeBuilder
@@ -94,8 +96,20 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
                         "probabilities": probabilities
                     })
         if ctx.obj.get("save"):
+            # instead of storing all results as one, we split them per base tree
+            # a header is used to map all individual stores
+            results_header = {}
+            for name, result in results.items():
+                nick = '%s%02s%s' % (hashlib.sha1(name).hexdigest(), random.getrandbits(8), time.strftime('%H%M%S'))
+                with open(structure.intermediate_file_path(file_type="pkl", variant=nick), "w") as output_file:
+                    results_header[name] = output_file.name
+                    pickle.dump(
+                        MulticoreResult({name: result}),
+                        output_file
+                    )
             with open(structure.intermediate_file_path(file_type="pkl"), "w") as output_file:
-                pickle.dump(results, output_file)
+                    pickle.dump(results_header, output_file)
+
 
 cli.add_command(generate_perturbated_tree)
 

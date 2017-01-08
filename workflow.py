@@ -10,6 +10,7 @@ import cPickle as pickle
 
 from assess.exceptions.exceptions import EventNotSupportedException
 from assess.generators.event_generator import NodeGenerator
+from assess_workflows.utils.multicoreresult import MulticoreResult
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
 
@@ -94,8 +95,21 @@ def batch_process_from_pkl(ctx, pcount):
         with open(file_path, "r") as input_file:
             if pcount > 1:
                 data = []
-                tree_data = pickle.load(input_file)
-                results["files"] = tree_data.keys()
+                # HEADER
+                # ######
+                # results are split into a header and data files
+                # see data_generation_cli.generate_perturbated_tree
+                tree_metadata = pickle.load(input_file)
+                # DATA -- TODO: do in each subprocess, for only the relevant row
+                # ######
+                # each data item is an individual multicore result
+                tree_data = MulticoreResult()
+                for key, pkl_path in tree_metadata.items():
+                    with open(pkl_path) as result_pkl:
+                        tree_data += pickle.load(result_pkl)
+                # END IO
+                # ######
+                results["files"] = tree_metadata.keys()
                 for vector_data in tree_data.values():
                     # tree is stored in tree
                     # distorted trees in perturbated_tree
