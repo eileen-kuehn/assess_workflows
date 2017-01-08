@@ -59,6 +59,7 @@ def output_r_data(ctx, filename, **kwargs):
 def do_multicore(count=1, target=None, data=None):
     pool = multiprocessing.Pool(processes=count)
     result_list = pool.map(target, data)
+    results = [result for result in result_list if result is not None]
     pool.close()
     pool.join()
-    return [result for result in result_list if result is not None]
+    return results

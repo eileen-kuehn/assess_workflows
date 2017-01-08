@@ -77,10 +77,10 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
             samples = json_data["data"]["samples"]
             if pcount > 1:
                 data = [{
-                    "filepath": sample[0],
+                    "filepath": item,
                     "repeat": repeat,
                     "probabilities": probabilities
-                } for sample in samples]
+                } for sample in samples for item in sample]
                 multicore_results = do_multicore(
                     count=pcount,
                     target=_generate_perturbated_tree,
@@ -90,11 +90,12 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
                     results += result
             else:
                 for sample in samples:
-                    results += _generate_perturbated_tree({
-                        "filepath": sample[0],
-                        "repeat": repeat,
-                        "probabilities": probabilities
-                    })
+                    for item in sample:
+                        results += _generate_perturbated_tree({
+                            "filepath": item,
+                            "repeat": repeat,
+                            "probabilities": probabilities
+                        })
         if ctx.obj.get("save"):
             # instead of storing all results as one, we split them per base tree
             # a header is used to map all individual stores
