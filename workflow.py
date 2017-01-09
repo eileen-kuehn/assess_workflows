@@ -170,9 +170,9 @@ def batch_process_as_vector(ctx):
 @click.command(short_help="Calculate the distance matrix for given trees.")
 @click.option("--trees", "trees", type=click.Path(), multiple=True,
               help="Path of trees to consider for pair-wise distance measurement.")
-@click.option("--skip-upper", "skip_upper", is_flag=True,
+@click.option("--skip_upper", "skip_upper", default=False,
               help="Skip calculations for upper part of matrix.")
-@click.option("--skip-diagonal", "skip_diagonal", is_flag=True,
+@click.option("--skip_diagonal", "skip_diagonal", default=False,
               help="Skip calculations for diagonal of matrix.")
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
@@ -182,8 +182,7 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         file_path = structure.input_file_path()
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data")
-            for value in input_data.values():
-                trees = value[0]
+            trees = [element for values in input_data.values()[0] for element in values]
     results = _init_results()
     results["files"] = results["prototypes"] = trees
 
