@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import math
 import click
 import importlib
 
@@ -232,14 +233,22 @@ def analyse_metric(ctx):
                         results += "Identified %s, checking now\n\n" % key
                         matrix_data = decorator_data[key]
                         valid = True
+                        diagonals = []
                         for row_idx, row_value in enumerate(matrix_data):
                             if row_value[0][row_idx] != 0:
                                 valid = False
                                 results += "* Identified Problem in Row/Col %s: %s\n" % (row_idx, row_value[0][row_idx])
+                                diagonals.append(row_value[0][row_idx])
                         if valid:
                             results += "* No issues found with diagonal\n"
+                        else:
+                            results += "\n### Error for Diagonal\n\n"
+                            mean = sum(diagonals)/len(diagonals)
+                            stderror = math.sqrt(sum([(error-mean)**2 for error in diagonals])/float(len(diagonals)-1))
+                            results += "* Error: %s +- %s\n" % (mean, stderror)
                 results += "\n## Symmetry in data\n\n"
                 results += "--> Data should be equal when distance is a metric\n\n"
+                all_values = []
                 for key in decorator_data:
                     if key in ["normalized_matrix", "matrix"]:
                         results += "Identified %s, checking now\n\n" % key
@@ -247,11 +256,17 @@ def analyse_metric(ctx):
                         valid = True
                         for row_idx, row_value in enumerate(matrix_data):
                             for col_idx in range(row_idx + 1, len(matrix_data)):
+                                all_values.append(abs(row_value[0][col_idx]-matrix_data[col_idx][0][row_idx]))
                                 if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
                                     valid = False
                                     results += "* Identified Problem for (%s:%s - %s:%s): %s != %s\n" % (row_idx, col_idx, col_idx, row_idx, row_value[0][col_idx], matrix_data[col_idx][0][row_idx])
                         if valid:
                             results += "* No issues found with symmetry\n"
+                        else:
+                            results += "\n### Error for all values\n\n"
+                            mean = sum(all_values)/len(all_values)
+                            stderror = math.sqrt(sum([(error-mean)**2 for error in all_values])/float(len(all_values)-1))
+                            results += "* Error: %s +- %s\n" % (mean, stderror)
                 results += "\n## Checking for Metric vs. Pseudo-Metric\n\n"
                 results += "--> For a metric different objects can never have distance 0\n\n"
                 for key in decorator_data:
