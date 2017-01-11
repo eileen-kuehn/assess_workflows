@@ -215,17 +215,13 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         )
         final_decorators = []
         row_idx = 0
-        col_idx = 0
-        row_count = 0
+        col_idx = -1
         for result_index, result_entry in enumerate(result_list):
             # calculate the exact position within matrix to help decorators updating their results
-            if result_index > col_idx:
-                col_idx += 1
-                row_count += 1
-            if row_count >= row_idx + 1:
+            col_idx += 1
+            if col_idx >= ((row_idx + 1) if skip_upper else index_value):
                 row_idx += 1
                 col_idx = 0
-                row_count = 0
             current_results = result_entry.get("results", [])
             # each of the results has the same configuration of decorators, so we can get one
             # exemplary list of decorators to process all results
