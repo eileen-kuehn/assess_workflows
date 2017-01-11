@@ -192,6 +192,7 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         data = []
         # prepare blocks of data
         block_size = len(tree_paths) / float(pcount) / 4.0
+        assert block_size > 1, "Blocksize is too small for proper parallelisation: %s" % block_size
         index_value = int(math.ceil(len(tree_paths) / block_size))
         for row_idx in range(index_value):
             for col_idx in range(index_value):
@@ -212,24 +213,48 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
             target=_process_as_matrix,
             data=data
         )
-        finals = None
-        current_index = 0
-        while current_index < len(result_list):
-            current_objects = result_list[current_index]["results"][0]["decorator"]
-            for key in current_objects:
-                decorator = Decorator.from_name(key)
-                decorator._data = current_objects[key]
-                current_index += 1
-                for row_idx in range(1, index_value):
-                    # append the next one
-                    other = Decorator.from_name(key)
-                    other._data = result_list[current_index]["results"][0]["decorator"][key]
-                    decorator += other
-                    current_index += 1
-            if finals is None:
-                finals = result_list[0]
-            else:
-                finals["results"][0]["decorator"][key].extend(decorator._data)
+        final_decorators = []
+        row_idx = 0
+        col_idx = 0
+        row_count = 0
+        for result_index, result_entry in enumerate(result_list):
+            # calculate the exact position within matrix to help decorators updating their results
+            if result_index > col_idx:
+                col_idx += 1
+                row_count += 1
+            if row_count >= row_idx + 1:
+                row_idx += 1
+                col_idx = 0
+                row_count = 0
+            current_results = result_entry.get("results", [])
+            # each of the results has the same configuration of decorators, so we can get one
+            # exemplary list of decorators to process all results
+            for decorator_key in current_results[0].get("decorator", {}):
+                for index, current_result in enumerate(current_results):
+                    try:
+                        # if decorator already exists, we only need to add current data
+                        decorator = final_decorators[index][decorator_key]
+                        current_decorator = type(decorator)()
+                        current_decorator._data = current_result.get("decorator", {})[decorator_key]
+                        current_decorator.row_idx = [row_idx]
+                        current_decorator.col_idx = [col_idx]
+                        decorator += current_decorator
+                    except (IndexError, KeyError):
+                        # if decorator does not exist, we load it and will later add data
+                        decorator = Decorator.from_name(decorator_key)
+                        decorator._data = current_result.get("decorator", {})[decorator_key]
+                        decorator.row_idx = [row_idx]
+                        decorator.col_idx = [col_idx]
+                        try:
+                            final_decorators[index].setdefault(decorator_key, decorator)
+                        except IndexError:
+                            final_decorators.append({decorator_key: decorator})
+        # format updated data
+        finals = result_list[0]
+        for index, final in enumerate(finals.get("results", [])):
+            for value in final_decorators[index].values():
+                data = value.descriptive_data()
+                final.get("decorator", {})[data.keys()[0]] = data.values()[0]
         results["results"] = finals["results"]
     else:
         tree_paths = tree_paths[:]
@@ -276,6 +301,9 @@ def _process_as_matrix(args):
         for tree_path in tree_paths:
             yield (tree_path, len(prototypes))
 
+    if len(tree_paths) == 0 or len(prototypes) == 0:
+        # skip stuff where nothing needs to be calculated...
+        return results
     results["results"] = _process_configurations(
         prototypes=prototypes,
         configurations=configurations,
