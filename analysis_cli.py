@@ -213,6 +213,7 @@ def analyse_diamonds(ctx, pcount):
 @click.pass_context
 def analyse_metric(ctx):
     results = ""
+    latex_results = ""
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
@@ -263,7 +264,8 @@ def analyse_metric(ctx):
                             results += "* Identified %s problems in symmetry" % symmetry_issue_counter
                             results += "\n#### Error for Symmetry\n\n"
                             mean, relative_std_error = uncorrelated_relative_error(all_values)
-                            results += "* uncorrelated relative error: %s +- %s\n" % (mean, relative_std_error)
+                            results += "* uncorrelated relative error: %s\n" % relative_std_error
+                            latex_results += "\\def\splitted_stats_relative_error_%s{\\num{%s}}\n" % (key, relative_std_error)
                         results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
                         results += "--> For a metric different objects can never have distance 0\n\n"
                         if metric_issue_counter == 0:
@@ -281,6 +283,14 @@ def analyse_metric(ctx):
         version=determine_version(os.path.dirname(assess_workflows.__file__)),
         source="%s (%s)" % (__file__, "analyse_metric"),
         file_type="md"
+    )
+    output_results(
+        ctx=ctx,
+        results=latex_results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "analyse_metric"),
+        file_type="tex",
+        comment_sign="%"
     )
 
 
