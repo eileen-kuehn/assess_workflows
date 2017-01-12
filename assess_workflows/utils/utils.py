@@ -18,7 +18,8 @@ def determine_version(path):
     return version
 
 
-def output_results(ctx, results=None, version=None, source=None, variant=None, file_type=None):
+def output_results(ctx, results=None, version=None, source=None, variant=None, file_type=None,
+                   comment_sign="#"):
     """
 
     :param ctx:
@@ -43,9 +44,9 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
             }
             print(json.dumps(dump, indent=2), file=output_channel)
         else:
-            print("# date: %s" % datetime.datetime.now(), file=output_channel)
-            print("# source: %s" % source if source else "unknown", file=output_channel)
-            print("# version: %s" % version if version else "unkown", file=output_channel)
+            print("%s date: %s" % (comment_sign, datetime.datetime.now()), file=output_channel)
+            print("%s source: %s" % (comment_sign, source if source else "unknown"), file=output_channel)
+            print("%s version: %s" % (comment_sign, version if version else "unkown"), file=output_channel)
             print(results, file=output_channel)
 
 
