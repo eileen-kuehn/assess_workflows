@@ -263,9 +263,10 @@ def analyse_metric(ctx):
                         else:
                             results += "* Identified %s problems in symmetry" % symmetry_issue_counter
                             results += "\n#### Error for Symmetry\n\n"
-                            mean, relative_std_error = uncorrelated_relative_error(all_values)
+                            relative_std_error = uncorrelated_relative_error(all_values)
                             results += "* uncorrelated relative error: %s\n" % relative_std_error
-                            latex_results += "\\def\splitted_stats_relative_error_%s{\\num{%s}}\n" % (key, relative_std_error)
+                            latex_results += "\\def\splittedstatsrelativeerror%s{\\num{%s}}\n" % (
+                                key.replace("_", ""), relative_std_error)
                         results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
                         results += "--> For a metric different objects can never have distance 0\n\n"
                         if metric_issue_counter == 0:
