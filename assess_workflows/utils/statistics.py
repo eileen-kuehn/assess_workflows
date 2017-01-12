@@ -23,11 +23,9 @@ def errors(values):
 
 def uncorrelated_relative_error(values):
     result = 0
-    mean = 0
     for left_value, right_value in values:
-        mean += abs(left_value - right_value)
         try:
             result += abs(left_value - right_value) / (left_value + right_value)
         except ZeroDivisionError:
             pass
-    return mean / len(values), result / len(values)
+    return result / len(values)
