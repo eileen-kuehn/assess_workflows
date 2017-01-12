@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import math
 import click
 import importlib
 
@@ -9,6 +8,7 @@ import logging
 import assess_workflows
 from assess.exceptions.exceptions import TreeInvalidatedException
 from assess_workflows.utils.multicoreresult import MulticoreResult
+from assess_workflows.utils.statistics import errors, uncorrelated_relative_error
 from gnmutils.exceptions import DataNotInCacheException
 
 from utility.exceptions import ExceptionFrame
@@ -221,70 +221,59 @@ def analyse_metric(ctx):
             analysis_data = json.load(input_file).get("data", None)
 
             if analysis_data:
-                results += "\n# Metric Analysis\n\n"
-                results += "## Files for further reference\n\n"
-                for index, file in enumerate(analysis_data["files"]):
-                    results += "* [%s]: %s\n" % (index, file)
-                results += "\n## Diagonal in data\n\n"
-                results += "--> Diagonal should be equal to 0 everywhere\n\n"
+                results += "\n# Metric Analysis\n"
                 decorator_data = analysis_data["results"][0]["decorator"]
                 for key in decorator_data:
                     if key in ["normalized_matrix", "matrix"]:
-                        results += "Identified %s, checking now\n\n" % key
+                        results += "\n## %s Analysis\n\n" % key
                         matrix_data = decorator_data[key]
-                        valid = True
                         diagonals = []
+                        all_values = []
+                        diagonal_issue_counter = 0
+                        symmetry_issue_counter = 0
+                        metric_issue_counter = 0
                         for row_idx, row_value in enumerate(matrix_data):
+                            diagonals.append(row_value[0][row_idx])
                             if row_value[0][row_idx] != 0:
-                                valid = False
-                                results += "* Identified Problem in Row/Col %s: %s\n" % (row_idx, row_value[0][row_idx])
-                                diagonals.append(row_value[0][row_idx])
-                        if valid:
+                                diagonal_issue_counter += 1
+                            for col_idx in range(row_idx + 1, len(matrix_data)):
+                                if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
+                                    symmetry_issue_counter += 1
+                                if col_idx != row_idx:
+                                    all_values.append(
+                                        (row_value[0][col_idx], matrix_data[col_idx][0][row_idx],))
+                                    if (row_value[0][col_idx] == 0 or
+                                            matrix_data[col_idx][0][row_idx] == 0) and col_idx != row_idx:
+                                        metric_issue_counter += 1
+                        results += "\n### Diagonal in data\n\n"
+                        results += "--> Diagonal should be equal to 0 everywhere\n\n"
+                        if diagonal_issue_counter == 0:
                             results += "* No issues found with diagonal\n"
                         else:
-                            results += "\n### Error for Diagonal\n\n"
-                            mean = sum(diagonals)/len(diagonals)
-                            stderror = math.sqrt(sum([(error-mean)**2 for error in diagonals])/float(len(diagonals)-1))
-                            results += "* Error: %s +- %s\n" % (mean, stderror)
-                results += "\n## Symmetry in data\n\n"
-                results += "--> Data should be equal when distance is a metric\n\n"
-                all_values = []
-                for key in decorator_data:
-                    if key in ["normalized_matrix", "matrix"]:
-                        results += "Identified %s, checking now\n\n" % key
-                        matrix_data = decorator_data[key]
-                        valid = True
-                        for row_idx, row_value in enumerate(matrix_data):
-                            for col_idx in range(row_idx + 1, len(matrix_data)):
-                                all_values.append(abs(row_value[0][col_idx]-matrix_data[col_idx][0][row_idx]))
-                                if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
-                                    valid = False
-                                    results += "* Identified Problem for (%s:%s - %s:%s): %s != %s\n" % (row_idx, col_idx, col_idx, row_idx, row_value[0][col_idx], matrix_data[col_idx][0][row_idx])
-                        if valid:
+                            results += "* Identified %s problems in diagonal" % diagonal_issue_counter
+                            results += "\n#### Error for Diagonal\n\n"
+                            mean, std_error, relative_std_error = errors(diagonals)
+                            results += "* absolute error: %s +- %s\n" % (mean, std_error)
+                            results += "* relative error: %s +- %s\n" % (mean, relative_std_error)
+                        results += "\n### Symmetry in data\n\n"
+                        results += "--> Data should be equal when distance is a metric\n\n"
+                        if symmetry_issue_counter == 0:
                             results += "* No issues found with symmetry\n"
                         else:
-                            results += "\n### Error for all values\n\n"
-                            mean = sum(all_values)/len(all_values)
-                            stderror = math.sqrt(sum([(error-mean)**2 for error in all_values])/float(len(all_values)-1))
-                            results += "* Error: %s +- %s\n" % (mean, stderror)
-                results += "\n## Checking for Metric vs. Pseudo-Metric\n\n"
-                results += "--> For a metric different objects can never have distance 0\n\n"
-                for key in decorator_data:
-                    if key in ["normalized_matrix", "matrix"]:
-                        results += "Identified %s, checking now\n\n" % key
-                        matrix_data = decorator_data[key]
-                        valid = True
-                        for row_idx, row_value in enumerate(matrix_data):
-                            for col_idx, value in enumerate(row_value):
-                                if row_idx == col_idx:
-                                    continue
-                                if value == 0:
-                                    valid = False
-                                    results += "* Identified distance of 0 for (%s:%s): %s == 0\n" % (row_idx, col_idx, value)
-                        if valid:
-                            results += "* Distance might be a metric\n"
+                            results += "* Identified %s problems in symmetry" % symmetry_issue_counter
+                            results += "\n#### Error for Symmetry\n\n"
+                            mean, relative_std_error = uncorrelated_relative_error(all_values)
+                            results += "* uncorrelated relative error: %s +- %s\n" % (mean, relative_std_error)
+                        results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
+                        results += "--> For a metric different objects can never have distance 0\n\n"
+                        if metric_issue_counter == 0:
+                            results += "* No issues found with equality, distance might be a metric\n"
                         else:
-                            results += "\n* Distance is no metric, but might be a pseudo-metric\n"
+                            results += "* Identified %s problems with equality\n" % metric_issue_counter
+                            results += "* Distance is no metric, but might be a pseudo-metric\n"
+                results += "## Files for further reference\n\n"
+                for index, current_file in enumerate(analysis_data["files"]):
+                    results += "* [%s]: %s\n" % (index, current_file)
 
     output_results(
         ctx=ctx,
