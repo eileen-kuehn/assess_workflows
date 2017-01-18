@@ -535,8 +535,8 @@ def analyse_attribute_weight(ctx):
                 create_cut <- function(dt, error_field, decorator, statistics) {
                     require(data.table)
                     tmp <- dt[statistic==statistics & decorator==decorator, ]
-                    sequence <- seq(0, ceiling(max(tmp[, error_field, with=F])*100)/100, 0.01)
-                    tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=sequence, labels=sequence[1:length(sequence)-1], right=F)
+                    # sequence <- seq(0, ceiling(max(tmp[, error_field, with=F])*100)/100, 0.01)
+                    tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=30, right=F)
                     tmp <- tmp[,.(count=.N), by=list(cut, weight)]
                     setkey(tmp, cut, weight)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,weight], unique=T)]
@@ -584,9 +584,9 @@ def analyse_attribute_weight(ctx):
                     min_size <- min(tmp$tree_size)
                     max_size <- max(tmp$tree_size)
                     bin_size <- 100
-                    sequence <- seq(min_size, max_size+bin_size, bin_size)
-                    tmp$cut <- cut(tmp$tree_size, breaks=sequence, labels=sequence[1:length(sequence)-1], right=F, ordered_result=T)
-                    tmp$pcut <- cut(tmp$prototype_size, breaks=sequence, labels=sequence[1:length(sequence)-1], right=F, ordered_result=T)
+                    # sequence <- seq(min_size, max_size+bin_size, bin_size)
+                    tmp$cut <- cut(tmp$tree_size, breaks=30, right=F, ordered_result=T)
+                    tmp$pcut <- cut(tmp$prototype_size, breaks=30, right=F, ordered_result=T)
                     tmp <- tmp[,.(mean=mean(get(error_field))), by=list(cut, pcut)]
                     setkey(tmp, cut, pcut)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,pcut], unique=T)]
