@@ -426,14 +426,23 @@ def analyse_attribute_weight(ctx):
                 brewer = importr("RColorBrewer")
 
                 input_data = json.load(input_file).get("data", None)
-                result_dt = None
-                calculated_dt = None
-                trees = input_data.get("files", [])
+                data_trees = input_data.get("files", [])
+
+                # pre-cache values for data.table generation
+                weights = []
+                statistics = []
+                trees = []
+                tree_sizes = []
+                prototypes = []
+                prototype_sizes = []
+                decorators = []
+                values = []
+                # first collect the data for the first data.table before creating the next one
                 for result in input_data.get("results", []):
                     try:
-                        tree_sizes = result.get("decorator", {})["data"]["prototypes"]["original"][0]
+                        data_tree_sizes = result.get("decorator", {})["data"]["prototypes"]["original"][0]
                     except KeyError:
-                        tree_sizes = []
+                        data_tree_sizes = []
                     algorithm = result.get("algorithm", None)
                     for key in ["SetStatistics", "SplittedStatistics"]:
                         if key in algorithm:
@@ -447,37 +456,73 @@ def analyse_attribute_weight(ctx):
                         for index, ensemble in enumerate(decorator):
                             for tree in ensemble:
                                 tree = [value if value is not None else 0 for value in tree]
-                                current_result = datatable.data_table(
-                                    weight=weight,
-                                    statistic=statistic,
-                                    tree=trees[index],
-                                    tree_size=tree_sizes[index],
-                                    prototype=base.unlist(trees),
-                                    prototype_size=base.unlist(tree_sizes),
-                                    decorator=decorator_key,
-                                    value=base.unlist(tree)
-                                )
-                                if result_dt is None:
-                                    result_dt = current_result
-                                else:
-                                    result_dt = datatable.rbindlist([result_dt, current_result])
+
+                                weights.extend([weight for _ in range(len(tree))])
+                                statistics.append([statistic for _ in range(len(tree))])
+                                trees.append([data_trees[index] for _ in range(len(tree))])
+                                tree_sizes.extend([data_tree_sizes[index] for _ in range(len(tree))])
+                                prototypes.extend(data_trees)
+                                prototype_sizes.extend(data_tree_sizes)
+                                decorators.extend([decorator_key for _ in range(len(tree))])
+                                values.extend(tree)
+                result_dt = datatable.data_table(
+                    weight=base.unlist(weights),
+                    statistic=base.unlist(statistics),
+                    tree=base.unlist(trees),
+                    tree_size=base.unlist(tree_sizes),
+                    prototype=base.unlist(prototypes),
+                    prototype_size=base.unlist(prototype_sizes),
+                    decorator=base.unlist(decorators),
+                    value=base.unlist(values)
+                )
+                weights = []
+                statistics = []
+                decorators = []
+                errors = []
+                trees = []
+                tree_sizes = []
+                prototypes = []
+                prototype_sizes = []
+                # create the data for the second data.table
+                for result in input_data.get("results", []):
+                    try:
+                        data_tree_sizes = result.get("decorator", {})["data"]["prototypes"]["original"][0]
+                    except KeyError:
+                        data_tree_sizes = []
+                    algorithm = result.get("algorithm", None)
+                    for key in ["SetStatistics", "SplittedStatistics"]:
+                        if key in algorithm:
+                            statistic = key
+                    weight = float(algorithm.split("=")[-1].split(")")[0])
+                    for decorator_key in result.get("decorator", {}):
+                        if "matrix" not in decorator_key:
+                            # skip other decorators
+                            continue
+                        decorator = result.get("decorator").get(decorator_key, None)
+                        for index, ensemble in enumerate(decorator):
+                            for tree in ensemble:
                                 for column_index in range(index):
                                     error = uncorrelated_relative_error([
-                                            (tree[column_index], decorator[column_index][0][index],)])
-                                    current_result = datatable.data_table(
-                                        weight=weight,
-                                        statistic=statistic,
-                                        decorator=decorator_key,
-                                        error=error,
-                                        tree=trees[index],
-                                        tree_size=tree_sizes[index],
-                                        prototype=trees[column_index],
-                                        prototype_size=tree_sizes[column_index]
-                                    )
-                                    if calculated_dt is None:
-                                        calculated_dt = current_result
-                                    else:
-                                        calculated_dt = datatable.rbindlist([calculated_dt, current_result])
+                                        (tree[column_index] or 0, decorator[column_index][0][index] or 0, )])
+                                    weights.append(weight)
+                                    statistics.append(statistic)
+                                    decorators.append(decorator_key)
+                                    errors.append(error)
+                                    trees.append(data_trees[index])
+                                    tree_sizes.append(data_tree_sizes[index])
+                                    prototypes.append(data_trees[column_index])
+                                    prototype_sizes.append(data_tree_sizes[column_index])
+                calculated_dt = datatable.data_table(
+                    weight=base.unlist(weights),
+                    statistic=base.unlist(statistics),
+                    decorator=base.unlist(decorators),
+                    error=base.unlist(errors),
+                    tree=base.unlist(trees),
+                    tree_size=base.unlist(tree_sizes),
+                    prototype=base.unlist(prototypes),
+                    prototype_size=base.unlist(prototype_sizes)
+                )
+
             robjects.r("""
                 create_cut <- function(dt) {
                     require(data.table)
