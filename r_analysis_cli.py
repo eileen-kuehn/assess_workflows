@@ -7,7 +7,8 @@ import rpy2
 import math
 
 from assess_workflows.generic.structure import Structure
-from assess_workflows.utils.statistics import uncorrelated_relative_error
+from assess_workflows.utils.statistics import uncorrelated_relative_error, \
+    uncorrelated_relative_distance_deviation
 from assess_workflows.utils.utils import output_r_data
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -479,6 +480,7 @@ def analyse_attribute_weight(ctx):
                 statistics = []
                 decorators = []
                 errors = []
+                distance_errors = []
                 trees = []
                 tree_sizes = []
                 prototypes = []
@@ -504,10 +506,15 @@ def analyse_attribute_weight(ctx):
                                 for column_index in range(index):
                                     error = uncorrelated_relative_error([
                                         (tree[column_index] or 0, decorator[column_index][0][index] or 0, )])
+                                    distance_error = uncorrelated_relative_distance_deviation([
+                                        (tree[column_index] or 0, data_tree_sizes[index] * 2,
+                                         decorator[column_index][0][index] or 0, data_tree_sizes[column_index])
+                                    ])
                                     weights.append(weight)
                                     statistics.append(statistic)
                                     decorators.append(decorator_key)
                                     errors.append(error)
+                                    distance_errors.append(distance_error)
                                     trees.append(data_trees[index])
                                     tree_sizes.append(data_tree_sizes[index])
                                     prototypes.append(data_trees[column_index])
@@ -517,6 +524,7 @@ def analyse_attribute_weight(ctx):
                     statistic=base.unlist(statistics),
                     decorator=base.unlist(decorators),
                     error=base.unlist(errors),
+                    distance_error=base.unlist(distance_errors),
                     tree=base.unlist(trees),
                     tree_size=base.unlist(tree_sizes),
                     prototype=base.unlist(prototypes),
@@ -524,11 +532,11 @@ def analyse_attribute_weight(ctx):
                 )
 
             robjects.r("""
-                create_cut <- function(dt) {
+                create_cut <- function(dt, error_field, decorator, statistics) {
                     require(data.table)
-                    tmp <- dt[statistic=="SplittedStatistics" & decorator=="normalized_matrix", ]
-                    sequence <- seq(0, ceiling(max(dt$error)*100)/100, 0.01)
-                    tmp$cut <- cut(tmp$error, breaks=sequence, labels=sequence[1:length(sequence)-1], right=F)
+                    tmp <- dt[statistic==statistics & decorator==decorator, ]
+                    sequence <- seq(0, ceiling(max(tmp[, error_field, with=F])*100)/100, 0.01)
+                    tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=sequence, labels=sequence[1:length(sequence)-1], right=F)
                     tmp <- tmp[,.(count=.N), by=list(cut, weight)]
                     setkey(tmp, cut, weight)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,weight], unique=T)]
@@ -536,27 +544,50 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut = robjects.r["create_cut"]
-            tmp_dt = create_cut(calculated_dt)
+            tmp_dt = create_cut(calculated_dt, "error", "normalized_matrix", "SplittedStatistics")
             # create a heatmap for our errors
             error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             error_heatmap_filename = os.path.join(structure.exploratory_path(), "error_heatmap.png")
-            grdevices.png(error_heatmap_filename)
-            error_heatmap.plot()
-            grdevices.dev_off()
+            # heatmap for SetStatistics
+            tmp_dt = create_cut(calculated_dt, "error", "normalized_matrix", "SetStatistics")
+            set_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+            set_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_error_heatmap.png")
+            # distance error heatmap
+            tmp_dt = create_cut(calculated_dt, "distance_error", "matrix", "SplittedStatistics")
+            distance_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+            distance_error_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_error_heatmap.png")
+            # distance error heatmap for SetStatistics
+            tmp_dt = create_cut(calculated_dt, "distance_error", "matrix", "SetStatistics")
+            set_distance_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+            set_distance_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_distance_error_heatmap.png")
+
+            for plot, filename in [(error_heatmap, error_heatmap_filename,),
+                                   (distance_error_heatmap, distance_error_heatmap_filename,),
+                                   (set_error_heatmap, set_error_heatmap_filename,),
+                                   (set_distance_error_heatmap, set_distance_error_heatmap_filename,)]:
+                grdevices.png(filename)
+                plot.plot()
+                grdevices.dev_off()
 
             robjects.r("""
-                create_cut_tree_sizes <- function(dt) {
+                create_cut_tree_sizes <- function(dt, error_field, decorator, statistics) {
                     require(data.table)
-                    tmp <- dt[statistic=="SplittedStatistics" & decorator=="normalized_matrix", ]
+                    tmp <- dt[statistic==statistics & decorator==decorator, ]
                     min_size <- min(tmp$tree_size)
                     max_size <- max(tmp$tree_size)
                     bin_size <- 100
                     sequence <- seq(min_size, max_size+bin_size, bin_size)
                     tmp$cut <- cut(tmp$tree_size, breaks=sequence, labels=sequence[1:length(sequence)-1], right=F, ordered_result=T)
                     tmp$pcut <- cut(tmp$prototype_size, breaks=sequence, labels=sequence[1:length(sequence)-1], right=F, ordered_result=T)
-                    tmp <- tmp[,.(mean=mean(error)), by=list(cut, pcut)]
+                    tmp <- tmp[,.(mean=mean(get(error_field))), by=list(cut, pcut)]
                     setkey(tmp, cut, pcut)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,pcut], unique=T)]
                     setkey(tmp, pcut, cut)
@@ -565,22 +596,51 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut_tree_sizes = robjects.r["create_cut_tree_sizes"]
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt)
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SplittedStatistics")
             # create heatmap plot for tree sizes
             tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
-            grdevices.png(tree_size_heatmap_filename)
-            tree_size_heatmap.plot()
-            grdevices.dev_off()
+            # create heatmap for tree sizes for SetStatistics
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SetStatistics")
+            set_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+            set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap.png")
+            # distance error heatmap for tree sizes
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SplittedStatistics")
+            distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+            distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_tree_size_heatmap.png")
+            # distance error heatmap for tree sizes for SetStatistics
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics")
+            set_distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+            set_distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_distance_tree_size_heatmap.png")
+
+            for plot, filename in [(tree_size_heatmap, tree_size_heatmap_filename,),
+                                   (set_tree_size_heatmap, set_tree_size_heatmap_filename,),
+                                   (distance_tree_size_heatmap, distance_tree_size_heatmap_filename,),
+                                   (set_distance_tree_size_heatmap, set_distance_tree_size_heatmap_filename,)]:
+                grdevices.png(filename)
+                plot.plot()
+                grdevices.dev_off()
 
             # save model data for further adaptations
             rdata_filename = structure.intermediate_file_path(file_type="RData")
             output_r_data(
                 ctx=ctx, filename=rdata_filename, result_dt=result_dt, calculated_dt=calculated_dt,
                 error_heatmap=error_heatmap, error_heatmap_filename=error_heatmap_filename,
-                tree_size_heatmap=tree_size_heatmap, tree_size_heatmap_filename=tree_size_heatmap_filename
+                set_error_heatmap=set_error_heatmap, set_error_heatmap_filename=set_error_heatmap_filename,
+                tree_size_heatmap=tree_size_heatmap, tree_size_heatmap_filename=tree_size_heatmap_filename,
+                set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename,
+                distance_error_heatmap=distance_error_heatmap, distance_error_heatmap_filename=distance_error_heatmap_filename,
+                set_distance_error_heatmap=set_distance_error_heatmap, set_distance_error_heatmap_filename=set_distance_error_heatmap_filename,
+                distance_tree_size_heatmap=distance_tree_size_heatmap, distance_tree_size_heatmap_filename=distance_tree_size_heatmap_filename,
+                set_distance_tree_size_heatmap=set_distance_tree_size_heatmap, set_distance_tree_size_heatmap_filename=set_distance_tree_size_heatmap_filename
             )
 
 
