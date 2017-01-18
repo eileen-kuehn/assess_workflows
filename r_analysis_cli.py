@@ -540,8 +540,9 @@ def analyse_attribute_weight(ctx):
 
 
 @click.command()
+@click.option("--seed", "seed", type=int, default=None)
 @click.pass_context
-def analyse_attribute_metric(ctx):
+def analyse_attribute_metric(ctx, seed):
     """
     Method performs specific analysis on SetStatistics and SplittedStatistics based on two different
     measurements. First considers the change of the mean of one specific distribution to change the
@@ -559,6 +560,7 @@ def analyse_attribute_metric(ctx):
         import rpy2.robjects.lib.ggplot2 as ggplot2
         from rpy2.robjects.lib.dplyr import DataFrame
         from rpy2 import robjects
+
         with open(os.path.join(os.path.join(structure.base_script_path(), "R"),
                                "statistics.R")) as statistics_r_file:
             statistics_r_string = statistics_r_file.read()
@@ -572,6 +574,9 @@ def analyse_attribute_metric(ctx):
         stats = importr("stats")
         grdevices = importr("grDevices")
         datatable = importr("data.table")
+
+        if seed is not None:
+            base.set_seed(seed)
 
         base_mean = 5
         # generate initial distribution to learn attribute statistics from
