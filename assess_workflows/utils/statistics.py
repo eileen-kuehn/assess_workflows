@@ -29,3 +29,11 @@ def uncorrelated_relative_error(values):
         except ZeroDivisionError:
             pass
     return result / len(values)
+
+
+def uncorrelated_relative_distance_deviation(values):
+    result = 0
+    for left_distance, left_max_distance, right_distance, right_max_distance in values:
+        result += ((abs(left_distance - right_distance) / left_max_distance) +
+                   (abs(left_distance - right_distance) / right_max_distance)) / 2
+    return result / len(values)
