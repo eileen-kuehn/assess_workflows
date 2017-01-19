@@ -69,5 +69,6 @@ def uncorrelated_relative_deviation_and_standard_error(values):
         errors.append((abs(left_distance - right_distance) / 2) /
                       (left_max_distance + right_max_distance))
     mean = sum(errors) / len(errors)
-    sample_sd = math.sqrt(sum([(error - mean)**2 for error in errors]) / (len(errors) - 1))
+    sample_sd = math.sqrt(sum([(error - mean)**2 for error in errors]) / (len(errors) - 1)) / \
+        math.sqrt(len(errors))
     return mean, sample_sd
