@@ -34,6 +34,14 @@ def uncorrelated_relative_error(values):
 def uncorrelated_relative_distance_deviation(values):
     result = 0
     for left_distance, left_max_distance, right_distance, right_max_distance in values:
-        result += ((abs(left_distance - right_distance) / left_max_distance) +
-                   (abs(left_distance - right_distance) / right_max_distance)) / 2
+        result += (((abs(left_distance - right_distance) / 2) / left_max_distance) +
+                   ((abs(left_distance - right_distance) / 2) / right_max_distance)) / 2
+    return result / len(values)
+
+
+def uncorrelated_relative_max_distance_deviation(values):
+    result = 0
+    for left_distance, left_max_distance, right_distance, right_max_distance in values:
+        result += (abs(left_distance - right_distance) / 2) / \
+                  (left_max_distance + right_max_distance)
     return result / len(values)
