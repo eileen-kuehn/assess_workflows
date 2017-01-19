@@ -546,14 +546,14 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut = robjects.r["create_cut"]
-            tmp_dt = create_cut(calculated_dt, "error", "normalized_matrix", "SplittedStatistics")
+            tmp_dt = create_cut(calculated_dt, "error", "matrix", "SplittedStatistics")
             # create a heatmap for our errors
             error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             error_heatmap_filename = os.path.join(structure.exploratory_path(), "error_heatmap.png")
             # heatmap for SetStatistics
-            tmp_dt = create_cut(calculated_dt, "error", "normalized_matrix", "SetStatistics")
+            tmp_dt = create_cut(calculated_dt, "error", "matrix", "SetStatistics")
             set_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
@@ -583,10 +583,6 @@ def analyse_attribute_weight(ctx):
                 create_cut_tree_sizes <- function(dt, error_field, decorator, statistics, selected_weight) {
                     require(data.table)
                     tmp <- dt[statistic==statistics & decorator==decorator & weight==selected_weight, ]
-                    min_size <- min(tmp$tree_size)
-                    max_size <- max(tmp$tree_size)
-                    bin_size <- 100
-                    # sequence <- seq(min_size, max_size+bin_size, bin_size)
                     tmp$cut <- cut(tmp$tree_size, breaks=30, right=F, ordered_result=T)
                     tmp$pcut <- cut(tmp$prototype_size, breaks=30, right=F, ordered_result=T)
                     tmp <- tmp[,.(mean=mean(get(error_field))), by=list(cut, pcut)]
@@ -598,14 +594,16 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut_tree_sizes = robjects.r["create_cut_tree_sizes"]
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SplittedStatistics", 0)
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "maxtrix", "SplittedStatistics", 0)
             # create heatmap plot for tree sizes
             tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
             # create heatmap for tree sizes for SetStatistics
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SetStatistics", 0)
+            # a different value for weight is required here, because only for values != 0, 0.5 or 1
+            # we get values for plotting
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "matrix", "SetStatistics", 0.1)
             set_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
