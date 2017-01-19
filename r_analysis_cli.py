@@ -8,7 +8,7 @@ import math
 
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_error, \
-    uncorrelated_relative_distance_deviation
+    uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation
 from assess_workflows.utils.utils import output_r_data
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -504,8 +504,10 @@ def analyse_attribute_weight(ctx):
                         for index, ensemble in enumerate(decorator):
                             for tree in ensemble:
                                 for column_index in range(index):
-                                    error = uncorrelated_relative_error([
-                                        (tree[column_index] or 0, decorator[column_index][0][index] or 0, )])
+                                    error = uncorrelated_relative_max_distance_deviation([
+                                        (tree[column_index] or 0, data_tree_sizes[index] * 2,
+                                         decorator[column_index][0][index] or 0, data_tree_sizes[column_index])
+                                    ])
                                     distance_error = uncorrelated_relative_distance_deviation([
                                         (tree[column_index] or 0, data_tree_sizes[index] * 2,
                                          decorator[column_index][0][index] or 0, data_tree_sizes[column_index])
