@@ -580,9 +580,9 @@ def analyse_attribute_weight(ctx):
                 grdevices.dev_off()
 
             robjects.r("""
-                create_cut_tree_sizes <- function(dt, error_field, decorator, statistics) {
+                create_cut_tree_sizes <- function(dt, error_field, decorator, statistics, selected_weight) {
                     require(data.table)
-                    tmp <- dt[statistic==statistics & decorator==decorator, ]
+                    tmp <- dt[statistic==statistics & decorator==decorator & weight==selected_weight, ]
                     min_size <- min(tmp$tree_size)
                     max_size <- max(tmp$tree_size)
                     bin_size <- 100
@@ -598,26 +598,26 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut_tree_sizes = robjects.r["create_cut_tree_sizes"]
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SplittedStatistics")
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SplittedStatistics", 0)
             # create heatmap plot for tree sizes
             tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
             # create heatmap for tree sizes for SetStatistics
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SetStatistics")
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "normalized_matrix", "SetStatistics", 0)
             set_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap.png")
             # distance error heatmap for tree sizes
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SplittedStatistics")
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SplittedStatistics", 0)
             distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_tree_size_heatmap.png")
             # distance error heatmap for tree sizes for SetStatistics
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics")
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics", 0)
             set_distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
