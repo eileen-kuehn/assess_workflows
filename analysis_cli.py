@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import click
@@ -8,7 +9,7 @@ import logging
 import assess_workflows
 from assess.exceptions.exceptions import TreeInvalidatedException
 from assess_workflows.utils.multicoreresult import MulticoreResult
-from assess_workflows.utils.statistics import errors, uncorrelated_relative_error
+from assess_workflows.utils.statistics import uncorrelated_relative_deviation_and_standard_error
 from gnmutils.exceptions import DataNotInCacheException
 
 from utility.exceptions import ExceptionFrame
@@ -212,6 +213,12 @@ def analyse_diamonds(ctx, pcount):
 @click.command()
 @click.pass_context
 def analyse_metric(ctx):
+    """
+    Method analyses the mean relative deviation for given distance functions to determine if those
+    might be metrics, pseudo-metrics, etc.
+
+    :param ctx:
+    """
     results = ""
     latex_results = ""
     if ctx.obj.get("use_input", False):
@@ -223,50 +230,82 @@ def analyse_metric(ctx):
 
             if analysis_data:
                 results += "\n# Metric Analysis\n"
+                algorithm = analysis_data["results"][0]["algorithm"]
+                try:
+                    statistics_algorithm = re.search("cache_statistics=(\w+)", algorithm).group(1)
+                except AttributeError:
+                    statistics_algorithm = "default"
                 decorator_data = analysis_data["results"][0]["decorator"]
+                try:
+                    data_tree_sizes = decorator_data.get("data", {})["prototypes"]["original"][0]
+                except KeyError:
+                    data_tree_sizes = []
                 for key in decorator_data:
                     if key in ["normalized_matrix", "matrix"]:
                         results += "\n## %s Analysis\n\n" % key
                         matrix_data = decorator_data[key]
-                        diagonals = []
-                        all_values = []
+                        diagonals = []  # values to calculate diagonal deviation
+                        all_values = []  # values to calculate deviation for all other fields
                         diagonal_issue_counter = 0
                         symmetry_issue_counter = 0
                         metric_issue_counter = 0
                         for row_idx, row_value in enumerate(matrix_data):
-                            diagonals.append(row_value[0][row_idx])
                             if row_value[0][row_idx] != 0:
                                 diagonal_issue_counter += 1
                             for col_idx in range(row_idx + 1, len(matrix_data)):
-                                if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
-                                    symmetry_issue_counter += 1
                                 if col_idx != row_idx:
-                                    all_values.append(
-                                        (row_value[0][col_idx], matrix_data[col_idx][0][row_idx],))
+                                    if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
+                                        symmetry_issue_counter += 1
+                                    all_values.append((
+                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
+                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+                                    ))
                                     if (row_value[0][col_idx] == 0 or
                                             matrix_data[col_idx][0][row_idx] == 0) and col_idx != row_idx:
                                         metric_issue_counter += 1
+                                else:
+                                    diagonals.append((
+                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
+                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+                                    ))
                         results += "\n### Diagonal in data\n\n"
                         results += "--> Diagonal should be equal to 0 everywhere\n\n"
                         if diagonal_issue_counter == 0:
                             results += "* No issues found with diagonal\n"
+                            latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), 0)
+                            latex_results += "% sample standard deviation\n"
+                            latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), 0)
                         else:
                             results += "* Identified %s problems in diagonal" % diagonal_issue_counter
                             results += "\n#### Error for Diagonal\n\n"
-                            mean, std_error, relative_std_error = errors(diagonals)
-                            results += "* absolute error: %s +- %s\n" % (mean, std_error)
-                            results += "* relative error: %s +- %s\n" % (mean, relative_std_error)
+                            diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(diagonals)
+                            results += "* mean relative deviation: %s +- %s\n" % (diagonal_mean, diagonal_error)
+                            latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), diagonal_mean)
+                            latex_results += "% sample standard deviation\n"
+                            latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), diagonal_error)
                         results += "\n### Symmetry in data\n\n"
                         results += "--> Data should be equal when distance is a metric\n\n"
                         if symmetry_issue_counter == 0:
                             results += "* No issues found with symmetry\n"
+                            latex_results += "\\def\%srelativemean%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), 0)
+                            latex_results += "% sample standard deviation\n"
+                            latex_results += "\\def\%srelativessd%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), 0)
                         else:
                             results += "* Identified %s problems in symmetry" % symmetry_issue_counter
                             results += "\n#### Error for Symmetry\n\n"
-                            relative_std_error = uncorrelated_relative_error(all_values)
-                            results += "* uncorrelated relative error: %s\n" % relative_std_error
-                            latex_results += "\\def\splittedstatsrelativeerror%s{%s}\n" % (
-                                key.replace("_", ""), relative_std_error)
+                            field_mean, field_error = uncorrelated_relative_deviation_and_standard_error(all_values)
+                            results += "* uncorrelated mean relative deviation: %s +- %s\n" % (field_mean, field_error)
+                            latex_results += "\\def\%srelativemean%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), field_mean)
+                            latex_results += "% sample standard deviation\n"
+                            latex_results += "\\def\%srelativessd%s{%s}\n" % (
+                                statistics_algorithm, key.replace("_", ""), field_error)
                         results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
                         results += "--> For a metric different objects can never have distance 0\n\n"
                         if metric_issue_counter == 0:
