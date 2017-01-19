@@ -615,7 +615,7 @@ def analyse_attribute_weight(ctx):
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_tree_size_heatmap.png")
             # distance error heatmap for tree sizes for SetStatistics
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics", 0)
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics", 0.1)
             set_distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
