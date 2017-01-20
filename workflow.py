@@ -181,96 +181,115 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
         with open(file_path, "r") as input_file:
-            input_data = json.load(input_file).get("data")
-            trees = [element for values in input_data.values()[0] for element in values]
+            # can be list of lists or flat list
+            trees = json.load(input_file).get("data").values()[0]
     results = _init_results()
-    results["files"] = results["prototypes"] = trees
+    results["files"] = results["prototypes"] = trees[:]
 
-    tree_paths = _get_input_files(trees, minimum=ctx.obj["start"], maxlen=ctx.obj["maximum"])
+    # if we have a flat list, check, otherwise, just take it
+    if type(trees[0]) == list:
+        tree_paths = trees
+        nested = True
+    else:
+        tree_paths = _get_input_files(trees, minimum=ctx.obj["start"], maxlen=ctx.obj["maximum"])
+        nested = False
 
     if pcount > 1:
-        data = []
-        # prepare blocks of data
-        block_size = len(tree_paths) / float(pcount) / 4.0
-        assert block_size > 1, "Blocksize is too small for proper parallelisation: %s" % block_size
-        index_value = int(math.ceil(len(tree_paths) / block_size))
-        for row_idx in range(index_value):
-            for col_idx in range(index_value):
-                if skip_upper and col_idx > row_idx:
-                    continue
-                row_trees = tree_paths[int(row_idx * block_size):min(
-                    int((row_idx + 1) * block_size), len(tree_paths))]
-                col_trees = tree_paths[int(col_idx * block_size):min(
-                    int((col_idx + 1) * block_size), len(tree_paths))]
-                data.append({
-                    "tree_paths": row_trees,
-                    "prototype_paths": col_trees,
-                    "configurations": ctx.obj["configurations"]
-                })
+        to_process = []
+        if nested:
+            to_process = tree_paths
+        else:
+            to_process.append(tree_paths)
+        while to_process:
+            data = []
+            single_tree_paths = to_process.pop(0)
+            # prepare blocks of data
+            block_size = len(single_tree_paths) / float(pcount) #/ 4.0
+            assert block_size > 1, "Blocksize is too small for proper parallelisation: %s" % block_size
+            index_value = int(math.ceil(len(single_tree_paths) / block_size))
+            for row_idx in range(index_value):
+                for col_idx in range(index_value):
+                    if skip_upper and col_idx > row_idx:
+                        continue
+                    row_trees = single_tree_paths[int(row_idx * block_size):min(
+                        int((row_idx + 1) * block_size), len(single_tree_paths))]
+                    col_trees = single_tree_paths[int(col_idx * block_size):min(
+                        int((col_idx + 1) * block_size), len(single_tree_paths))]
+                    data.append({
+                        "tree_paths": row_trees,
+                        "prototype_paths": col_trees,
+                        "configurations": ctx.obj["configurations"]
+                    })
 
-        result_list = do_multicore(
-            count=pcount,
-            target=_process_as_matrix,
-            data=data
-        )
-        final_decorators = []
-        row_idx = 0
-        col_idx = -1
-        for result_index, result_entry in enumerate(result_list):
-            # calculate the exact position within matrix to help decorators updating their results
-            col_idx += 1
-            if col_idx >= ((row_idx + 1) if skip_upper else index_value):
-                row_idx += 1
-                col_idx = 0
-            current_results = result_entry.get("results", [])
-            # each of the results has the same configuration of decorators, so we can get one
-            # exemplary list of decorators to process all results
-            for decorator_key in current_results[0].get("decorator", {}):
-                for index, current_result in enumerate(current_results):
-                    try:
-                        # if decorator already exists, we only need to add current data
-                        decorator = final_decorators[index][decorator_key]
-                        current_decorator = type(decorator)()
-                        current_decorator._data = current_result.get("decorator", {})[decorator_key]
-                        current_decorator.row_idx = [row_idx]
-                        current_decorator.col_idx = [col_idx]
-                        decorator += current_decorator
-                    except (IndexError, KeyError):
-                        # if decorator does not exist, we load it and will later add data
-                        decorator = Decorator.from_name(decorator_key)
-                        decorator._data = current_result.get("decorator", {})[decorator_key]
-                        decorator.row_idx = [row_idx]
-                        decorator.col_idx = [col_idx]
+            result_list = do_multicore(
+                count=pcount,
+                target=_process_as_matrix,
+                data=data
+            )
+            final_decorators = []
+            row_idx = 0
+            col_idx = -1
+            for result_index, result_entry in enumerate(result_list):
+                # calculate the exact position within matrix to help decorators updating their results
+                col_idx += 1
+                if col_idx >= ((row_idx + 1) if skip_upper else index_value):
+                    row_idx += 1
+                    col_idx = 0
+                current_results = result_entry.get("results", [])
+                # each of the results has the same configuration of decorators, so we can get one
+                # exemplary list of decorators to process all results
+                for decorator_key in current_results[0].get("decorator", {}):
+                    for index, current_result in enumerate(current_results):
                         try:
-                            final_decorators[index].setdefault(decorator_key, decorator)
-                        except IndexError:
-                            final_decorators.append({decorator_key: decorator})
-        # format updated data
-        finals = result_list[0]
-        for index, final in enumerate(finals.get("results", [])):
-            for value in final_decorators[index].values():
-                data = value.descriptive_data()
-                final.get("decorator", {})[data.keys()[0]] = data.values()[0]
-        results["results"] = finals["results"]
+                            # if decorator already exists, we only need to add current data
+                            decorator = final_decorators[index][decorator_key]
+                            current_decorator = type(decorator)()
+                            current_decorator._data = current_result.get("decorator", {})[decorator_key]
+                            current_decorator.row_idx = [row_idx]
+                            current_decorator.col_idx = [col_idx]
+                            decorator += current_decorator
+                        except (IndexError, KeyError):
+                            # if decorator does not exist, we load it and will later add data
+                            decorator = Decorator.from_name(decorator_key)
+                            decorator._data = current_result.get("decorator", {})[decorator_key]
+                            decorator.row_idx = [row_idx]
+                            decorator.col_idx = [col_idx]
+                            try:
+                                final_decorators[index].setdefault(decorator_key, decorator)
+                            except IndexError:
+                                final_decorators.append({decorator_key: decorator})
+            # format updated data
+            finals = result_list[0]
+            for index, final in enumerate(finals.get("results", [])):
+                for value in final_decorators[index].values():
+                    data = value.descriptive_data()
+                    final.get("decorator", {})[data.keys()[0]] = data.values()[0]
+            results.setdefault("results", []).append(finals["results"])
     else:
-        tree_paths = tree_paths[:]
-        # build prototypes
-        prototypes = _initialise_prototypes(tree_paths)
+        to_process = []
+        if nested:
+            to_process = tree_paths
+        else:
+            to_process.append(tree_paths)
+        while to_process:
+            single_tree_paths = to_process.pop(0)
+            # build prototypes
+            prototypes = _initialise_prototypes(single_tree_paths)
 
-        def path_generator():
-            for tree_index, tree_path in enumerate(tree_paths):
-                maxlen = len(tree_paths)
-                if skip_upper and skip_diagonal:
-                    maxlen = tree_index
-                elif skip_upper:
-                    maxlen = tree_index + 1
-                yield (tree_path, maxlen)
+            def path_generator():
+                for tree_index, tree_path in enumerate(single_tree_paths):
+                    maxlen = len(single_tree_paths)
+                    if skip_upper and skip_diagonal:
+                        maxlen = tree_index
+                    elif skip_upper:
+                        maxlen = tree_index + 1
+                    yield (tree_path, maxlen)
 
-        results["results"] = _process_configurations(
-            prototypes=prototypes,
-            configurations=ctx.obj["configurations"],
-            event_generator=path_generator
-        )
+            results.setdefault("results", []).append(_process_configurations(
+                prototypes=prototypes,
+                configurations=ctx.obj["configurations"],
+                event_generator=path_generator
+            ))
 
     output_results(
         ctx=ctx,
