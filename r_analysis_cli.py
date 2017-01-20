@@ -8,7 +8,8 @@ import math
 
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_error, \
-    uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation
+    uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation, \
+    uncorrelated_relative_deviation_and_standard_error
 from assess_workflows.utils.utils import output_r_data
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -430,6 +431,7 @@ def analyse_attribute_weight(ctx):
                 data_trees = input_data.get("files", [])
 
                 # pre-cache values for data.table generation
+                result_indexes = []
                 weights = []
                 statistics = []
                 trees = []
@@ -439,34 +441,37 @@ def analyse_attribute_weight(ctx):
                 decorators = []
                 values = []
                 # first collect the data for the first data.table before creating the next one
-                for result in input_data.get("results", []):
-                    try:
-                        data_tree_sizes = result.get("decorator", {})["data"]["prototypes"]["original"][0]
-                    except KeyError:
-                        data_tree_sizes = []
-                    algorithm = result.get("algorithm", None)
-                    for key in ["SetStatistics", "SplittedStatistics"]:
-                        if key in algorithm:
-                            statistic = key
-                    weight = float(algorithm.split("=")[-1].split(")")[0])
-                    for decorator_key in result.get("decorator", {}):
-                        if "matrix" not in decorator_key:
-                            # skip other decorators
-                            continue
-                        decorator = result.get("decorator").get(decorator_key, None)
-                        for index, ensemble in enumerate(decorator):
-                            for tree in ensemble:
-                                tree = [value if value is not None else 0 for value in tree]
+                for result_index, result in enumerate(input_data.get("results", [])):
+                    for result_entry in result:
+                        try:
+                            data_tree_sizes = result_entry.get("decorator", {})["data"]["prototypes"]["original"][0]
+                        except KeyError:
+                            data_tree_sizes = []
+                        algorithm = result_entry.get("algorithm", None)
+                        for key in ["SetStatistics", "SplittedStatistics"]:
+                            if key in algorithm:
+                                statistic = key
+                        weight = float(algorithm.split("=")[-1].split(")")[0])
+                        for decorator_key in result_entry.get("decorator", {}):
+                            if "matrix" not in decorator_key:
+                                # skip other decorators
+                                continue
+                            decorator = result_entry.get("decorator").get(decorator_key, None)
+                            for index, ensemble in enumerate(decorator):
+                                for tree in ensemble:
+                                    tree = [value if value is not None else 0 for value in tree]
 
-                                weights.extend([weight for _ in range(len(tree))])
-                                statistics.append([statistic for _ in range(len(tree))])
-                                trees.append([data_trees[index] for _ in range(len(tree))])
-                                tree_sizes.extend([data_tree_sizes[index] for _ in range(len(tree))])
-                                prototypes.extend(data_trees)
-                                prototype_sizes.extend(data_tree_sizes)
-                                decorators.extend([decorator_key for _ in range(len(tree))])
-                                values.extend(tree)
+                                    result_indexes.extend([result_index for _ in range(len(tree))])
+                                    weights.extend([weight for _ in range(len(tree))])
+                                    statistics.append([statistic for _ in range(len(tree))])
+                                    trees.append([data_trees[result_index][index] for _ in range(len(tree))])
+                                    tree_sizes.extend([data_tree_sizes[index] for _ in range(len(tree))])
+                                    prototypes.extend(data_trees[result_index])
+                                    prototype_sizes.extend(data_tree_sizes)
+                                    decorators.extend([decorator_key for _ in range(len(tree))])
+                                    values.extend(tree)
                 result_dt = datatable.data_table(
+                    repetition=base.unlist(result_indexes),
                     weight=base.unlist(weights),
                     statistic=base.unlist(statistics),
                     tree=base.unlist(trees),
@@ -476,57 +481,53 @@ def analyse_attribute_weight(ctx):
                     decorator=base.unlist(decorators),
                     value=base.unlist(values)
                 )
+                result_indexes = []
                 weights = []
                 statistics = []
                 decorators = []
                 errors = []
-                distance_errors = []
                 trees = []
                 tree_sizes = []
                 prototypes = []
                 prototype_sizes = []
                 # create the data for the second data.table
-                for result in input_data.get("results", []):
-                    try:
-                        data_tree_sizes = result.get("decorator", {})["data"]["prototypes"]["original"][0]
-                    except KeyError:
-                        data_tree_sizes = []
-                    algorithm = result.get("algorithm", None)
-                    for key in ["SetStatistics", "SplittedStatistics"]:
-                        if key in algorithm:
-                            statistic = key
-                    weight = float(algorithm.split("=")[-1].split(")")[0])
-                    for decorator_key in result.get("decorator", {}):
-                        if "matrix" not in decorator_key:
-                            # skip other decorators
-                            continue
-                        decorator = result.get("decorator").get(decorator_key, None)
-                        for index, ensemble in enumerate(decorator):
-                            for tree in ensemble:
-                                for column_index in range(index):
-                                    error = uncorrelated_relative_max_distance_deviation([
-                                        (tree[column_index] or 0, data_tree_sizes[index] * 2,
-                                         decorator[column_index][0][index] or 0, data_tree_sizes[column_index] * 2)
-                                    ])
-                                    distance_error = uncorrelated_relative_distance_deviation([
-                                        (tree[column_index] or 0, data_tree_sizes[index] * 2,
-                                         decorator[column_index][0][index] or 0, data_tree_sizes[column_index] * 2)
-                                    ])
-                                    weights.append(weight)
-                                    statistics.append(statistic)
-                                    decorators.append(decorator_key)
-                                    errors.append(error)
-                                    distance_errors.append(distance_error)
-                                    trees.append(data_trees[index])
-                                    tree_sizes.append(data_tree_sizes[index])
-                                    prototypes.append(data_trees[column_index])
-                                    prototype_sizes.append(data_tree_sizes[column_index])
+                for result_index, result in enumerate(input_data.get("results", [])):
+                    for result_entry in result:
+                        try:
+                            data_tree_sizes = result_entry.get("decorator", {})["data"]["prototypes"]["original"][0]
+                        except KeyError:
+                            data_tree_sizes = []
+                        algorithm = result_entry.get("algorithm", None)
+                        for key in ["SetStatistics", "SplittedStatistics"]:
+                            if key in algorithm:
+                                statistic = key
+                        weight = float(algorithm.split("=")[-1].split(")")[0])
+                        for decorator_key in result_entry.get("decorator", {}):
+                            if "matrix" not in decorator_key:
+                                # skip other decorators
+                                continue
+                            decorator = result_entry.get("decorator").get(decorator_key, None)
+                            for index, ensemble in enumerate(decorator):
+                                for tree in ensemble:
+                                    for column_index in range(index):
+                                        error = uncorrelated_relative_max_distance_deviation([
+                                            (tree[column_index] or 0, data_tree_sizes[index] * 2,
+                                             decorator[column_index][0][index] or 0, data_tree_sizes[column_index] * 2)
+                                        ])
+                                        result_indexes.append(result_index)
+                                        weights.append(weight)
+                                        statistics.append(statistic)
+                                        decorators.append(decorator_key)
+                                        errors.append(error)
+                                        trees.append(data_trees[result_index][index])
+                                        tree_sizes.append(data_tree_sizes[index])
+                                        prototypes.append(data_trees[result_index][column_index])
+                                        prototype_sizes.append(data_tree_sizes[column_index])
                 calculated_dt = datatable.data_table(
                     weight=base.unlist(weights),
                     statistic=base.unlist(statistics),
                     decorator=base.unlist(decorators),
                     error=base.unlist(errors),
-                    distance_error=base.unlist(distance_errors),
                     tree=base.unlist(trees),
                     tree_size=base.unlist(tree_sizes),
                     prototype=base.unlist(prototypes),
@@ -537,7 +538,6 @@ def analyse_attribute_weight(ctx):
                 create_cut <- function(dt, error_field, decorator, statistics) {
                     require(data.table)
                     tmp <- dt[statistic==statistics & decorator==decorator, ]
-                    # sequence <- seq(0, ceiling(max(tmp[, error_field, with=F])*100)/100, 0.01)
                     tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=30, right=F)
                     tmp <- tmp[,.(count=.N), by=list(cut, weight)]
                     setkey(tmp, cut, weight)
@@ -550,34 +550,14 @@ def analyse_attribute_weight(ctx):
             # create a heatmap for our errors
             error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             error_heatmap_filename = os.path.join(structure.exploratory_path(), "error_heatmap.png")
             # heatmap for SetStatistics
             tmp_dt = create_cut(calculated_dt, "error", "matrix", "SetStatistics")
             set_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             set_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_error_heatmap.png")
-            # distance error heatmap
-            tmp_dt = create_cut(calculated_dt, "distance_error", "matrix", "SplittedStatistics")
-            distance_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
-                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
-            distance_error_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_error_heatmap.png")
-            # distance error heatmap for SetStatistics
-            tmp_dt = create_cut(calculated_dt, "distance_error", "matrix", "SetStatistics")
-            set_distance_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
-                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
-            set_distance_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_distance_error_heatmap.png")
-
-            for plot, filename in [(error_heatmap, error_heatmap_filename,),
-                                   (distance_error_heatmap, distance_error_heatmap_filename,),
-                                   (set_error_heatmap, set_error_heatmap_filename,),
-                                   (set_distance_error_heatmap, set_distance_error_heatmap_filename,)]:
-                grdevices.png(filename)
-                plot.plot()
-                grdevices.dev_off()
 
             robjects.r("""
                 create_cut_tree_sizes <- function(dt, error_field, decorator, statistics, selected_weight) {
@@ -598,7 +578,7 @@ def analyse_attribute_weight(ctx):
             # create heatmap plot for tree sizes
             tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
             # create heatmap for tree sizes for SetStatistics
             # a different value for weight is required here, because only for values != 0, 0.5 or 1
@@ -606,25 +586,14 @@ def analyse_attribute_weight(ctx):
             size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "matrix", "SetStatistics", 0.1)
             set_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap.png")
-            # distance error heatmap for tree sizes
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SplittedStatistics", 0)
-            distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
-                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
-            distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "distance_tree_size_heatmap.png")
-            # distance error heatmap for tree sizes for SetStatistics
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "distance_error", "matrix", "SetStatistics", 0.1)
-            set_distance_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
-                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
-                trans="log", colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
-            set_distance_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_distance_tree_size_heatmap.png")
 
-            for plot, filename in [(tree_size_heatmap, tree_size_heatmap_filename,),
-                                   (set_tree_size_heatmap, set_tree_size_heatmap_filename,),
-                                   (distance_tree_size_heatmap, distance_tree_size_heatmap_filename,),
-                                   (set_distance_tree_size_heatmap, set_distance_tree_size_heatmap_filename,)]:
+            # perform the plotting
+            for plot, filename in [(error_heatmap, error_heatmap_filename,),
+                                   (set_error_heatmap, set_error_heatmap_filename,),
+                                   (tree_size_heatmap, tree_size_heatmap_filename,),
+                                   (set_tree_size_heatmap, set_tree_size_heatmap_filename,)]:
                 grdevices.png(filename)
                 plot.plot()
                 grdevices.dev_off()
@@ -636,11 +605,7 @@ def analyse_attribute_weight(ctx):
                 error_heatmap=error_heatmap, error_heatmap_filename=error_heatmap_filename,
                 set_error_heatmap=set_error_heatmap, set_error_heatmap_filename=set_error_heatmap_filename,
                 tree_size_heatmap=tree_size_heatmap, tree_size_heatmap_filename=tree_size_heatmap_filename,
-                set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename,
-                distance_error_heatmap=distance_error_heatmap, distance_error_heatmap_filename=distance_error_heatmap_filename,
-                set_distance_error_heatmap=set_distance_error_heatmap, set_distance_error_heatmap_filename=set_distance_error_heatmap_filename,
-                distance_tree_size_heatmap=distance_tree_size_heatmap, distance_tree_size_heatmap_filename=distance_tree_size_heatmap_filename,
-                set_distance_tree_size_heatmap=set_distance_tree_size_heatmap, set_distance_tree_size_heatmap_filename=set_distance_tree_size_heatmap_filename
+                set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename
             )
 
 
