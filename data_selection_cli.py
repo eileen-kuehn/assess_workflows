@@ -378,6 +378,42 @@ def pick_samples(ctx, seed, repeat, count, skip_key):
     )
 
 
+@click.command()
+@click.pass_context
+def aggregate_samples(ctx):
+    """
+    Method aggregates nested dictionaries into a flat one. If it already is a flat dictionary,
+    than data is kept and written.
+
+    :param ctx:
+    :return:
+    """
+    results = {}
+
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            input_data = json.load(input_file).get("data", None)
+
+            for key, values in input_data.items():
+                if len(values[0]) > 1:
+                    # flattening data
+                    results.setdefault(key, []).append(
+                        [element for value in values[0] for element in value])
+                else:
+                    # data can be kept
+                    results.setdefault(key, []).append(values[0])
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "aggregate_samples")
+    )
+
+
 def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
@@ -475,6 +511,7 @@ cli.add_command(index_tree_statistics)
 cli.add_command(squish_index_into_ranges)
 cli.add_command(subset_data)
 cli.add_command(pick_samples)
+cli.add_command(aggregate_samples)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
