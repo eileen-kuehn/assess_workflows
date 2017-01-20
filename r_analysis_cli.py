@@ -607,14 +607,14 @@ def analyse_attribute_weight(ctx):
                 }
             """)
             create_cut_tree_sizes = robjects.r["create_cut_tree_sizes"]
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "maxtrix", "SplittedStatistics", 0)
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "matrix", "SplittedStatistics", 0)
             # create heatmap plot for tree sizes
             tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
             # tree sizes for for diagonal
-            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "maxtrix", "SplittedStatistics", 0, "TRUE")
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "matrix", "SplittedStatistics", 0, "TRUE")
             diagonal_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
@@ -634,6 +634,33 @@ def analyse_attribute_weight(ctx):
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             diagonal_set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap_diagonal.png")
 
+            robjects.r("""
+            create_cut_diagonal <- function(dt, decorator, statistics) {
+                tmp <- dt[statistic==statistics & decorator==decorator & tree==prototype,]
+                breaks <- min(30, length(unique(tmp$tree_size)))
+                if (breaks > 1) {
+                    tmp$cut <- cut(tmp$tree_size, breaks=30, right=F, ordered_result=T)
+                } else {
+                    tmp$cut <- factor(tmp$tree_size, ordered=T)
+                }
+                tmp <- tmp[,.(mean=mean(error)),by=list(weight, cut)]
+                tmp
+            }
+            """)
+            create_cut_diagonal = robjects.r["create_cut_diagonal"]
+            diagonal_tmp_dt = create_cut_diagonal(calculated_dt, "matrix", "SplittedStatistics")
+            # diagonal special plot
+            diagonal_heatmap = ggplot2.ggplot(diagonal_tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="mean") + \
+                ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name="Reds"), na_value="white", name="Error")
+            diagonal_heatmap_filename = os.path.join(structure.exploratory_path(), "diagonal.png")
+            # set specific diagonal
+            diagonal_tmp_dt = create_cut_diagonal(calculated_dt, "matrix", "SetStatistics")
+            set_diagonal_heatmap = ggplot2.ggplot(diagonal_tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="mean") + \
+                ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name="Reds"), na_value="white", name="Error")
+            set_diagonal_heatmap_filename = os.path.join(structure.exploratory_path(), "set_diagonal.png")
+
             # perform the plotting
             for plot, filename in [(error_heatmap, error_heatmap_filename,),
                                    (set_error_heatmap, set_error_heatmap_filename,),
@@ -642,7 +669,9 @@ def analyse_attribute_weight(ctx):
                                    (diagonal_error_heatmap, diagonal_error_heatmap_filename,),
                                    (diagonal_set_error_heatmap, diagonal_set_error_heatmap_filename,),
                                    (diagonal_tree_size_heatmap, diagonal_tree_size_heatmap_filename,),
-                                   (diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename)]:
+                                   (diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename,),
+                                   (diagonal_heatmap, diagonal_heatmap_filename,),
+                                   (set_diagonal_heatmap, set_diagonal_heatmap_filename,)]:
                 grdevices.png(filename)
                 plot.plot()
                 grdevices.dev_off()
@@ -657,7 +686,9 @@ def analyse_attribute_weight(ctx):
                 set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename,
                 diagonal_error_heatmap=diagonal_error_heatmap, diagonal_error_heatmap_filename=diagonal_error_heatmap_filename,
                 diagonal_tree_size_heatmap=diagonal_tree_size_heatmap, diagonal_tree_size_heatmap_filename=diagonal_tree_size_heatmap_filename,
-                diagonal_set_tree_size_heatmap=diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename=diagonal_set_tree_size_heatmap_filename
+                diagonal_set_tree_size_heatmap=diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename=diagonal_set_tree_size_heatmap_filename,
+                diagonal_heatmap=diagonal_heatmap, diagonal_heatmap_filename=diagonal_heatmap_filename,
+                set_diagonal_heatmap=set_diagonal_heatmap, set_diagonal_heatmap_filename=set_diagonal_heatmap_filename
             )
 
 
