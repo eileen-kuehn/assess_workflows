@@ -509,7 +509,7 @@ def analyse_attribute_weight(ctx):
                             decorator = result_entry.get("decorator").get(decorator_key, None)
                             for index, ensemble in enumerate(decorator):
                                 for tree in ensemble:
-                                    for column_index in range(index):
+                                    for column_index in range(index + 1):
                                         error = uncorrelated_relative_max_distance_deviation([
                                             (tree[column_index] or 0, data_tree_sizes[index] * 2,
                                              decorator[column_index][0][index] or 0, data_tree_sizes[column_index] * 2)
@@ -535,10 +535,20 @@ def analyse_attribute_weight(ctx):
                 )
 
             robjects.r("""
-                create_cut <- function(dt, error_field, decorator, statistics) {
+                create_cut <- function(dt, error_field, decorator, statistics, diagonal=FALSE) {
                     require(data.table)
-                    tmp <- dt[statistic==statistics & decorator==decorator, ]
-                    tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=30, right=F)
+                    tmp <- NULL
+                    if (diagonal) {
+                        tmp <- dt[statistic==statistics & decorator==decorator & tree==prototype, ]
+                    } else {
+                        tmp <- dt[statistic==statistics & decorator==decorator & tree!=prototype, ]
+                    }
+                    breaks <- min(30, length(unique(unlist(tmp[, error_field, with=F]))))
+                    if (breaks > 1) {
+                        tmp$cut <- cut(unlist(tmp[, error_field, with=F]), breaks=breaks, right=F)
+                    } else {
+                        tmp$cut <- factor(unlist(tmp[, error_field, with=F]), ordered=T)
+                    }
                     tmp <- tmp[,.(count=.N), by=list(cut, weight)]
                     setkey(tmp, cut, weight)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,weight], unique=T)]
@@ -552,19 +562,42 @@ def analyse_attribute_weight(ctx):
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             error_heatmap_filename = os.path.join(structure.exploratory_path(), "error_heatmap.png")
+            # create heatmap for diagonal
+            tmp_dt = create_cut(calculated_dt, "error", "matrix", "SplittedStatistics", "TRUE")
+            diagonal_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+            diagonal_error_heatmap_filename = os.path.join(structure.exploratory_path(), "error_heatmap_diagonal.png")
             # heatmap for SetStatistics
             tmp_dt = create_cut(calculated_dt, "error", "matrix", "SetStatistics")
             set_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
             set_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_error_heatmap.png")
+            # heatmap for diagonal for SetStatistics
+            tmp_dt = create_cut(calculated_dt, "error", "matrix", "SetStatistics", "TRUE")
+            diagonal_set_error_heatmap = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="weight", y="cut", fill="count") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Count")
+            diagonal_set_error_heatmap_filename = os.path.join(structure.exploratory_path(), "set_error_heatmap_diagonal.png")
 
             robjects.r("""
-                create_cut_tree_sizes <- function(dt, error_field, decorator, statistics, selected_weight) {
+                create_cut_tree_sizes <- function(dt, error_field, decorator, statistics, selected_weight, diagonal=FALSE) {
                     require(data.table)
-                    tmp <- dt[statistic==statistics & decorator==decorator & weight==selected_weight, ]
-                    tmp$cut <- cut(tmp$tree_size, breaks=30, right=F, ordered_result=T)
-                    tmp$pcut <- cut(tmp$prototype_size, breaks=30, right=F, ordered_result=T)
+                    tmp <- NULL
+                    if (diagonal) {
+                        tmp <- dt[statistic==statistics & decorator==decorator & weight==selected_weight & tree==prototype, ]
+                    } else {
+                        tmp <- dt[statistic==statistics & decorator==decorator & weight==selected_weight & tree!=prototype, ]
+                    }
+                    breaks <- min(30, length(unique(tmp$tree_size)))
+                    if (breaks > 1) {
+                        tmp$cut <- cut(tmp$tree_size, breaks=breaks, right=F, ordered_result=T)
+                        tmp$pcut <- cut(tmp$prototype_size, breaks=breaks, right=F, ordered_result=T)
+                    } else {
+                        tmp$cut <- factor(tmp$tree_size, ordered=T)
+                        tmp$pcut <- factor(tmp$prototype_size, ordered=T)
+                    }
                     tmp <- tmp[,.(mean=mean(get(error_field))), by=list(cut, pcut)]
                     setkey(tmp, cut, pcut)
                     tmp <- tmp[CJ(factor(levels(tmp[,cut]), levels(tmp$cut), ordered=T), tmp[,pcut], unique=T)]
@@ -580,6 +613,12 @@ def analyse_attribute_weight(ctx):
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap.png")
+            # tree sizes for for diagonal
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "maxtrix", "SplittedStatistics", 0, "TRUE")
+            diagonal_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+            diagonal_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "tree_size_heatmap_diagonal.png")
             # create heatmap for tree sizes for SetStatistics
             # a different value for weight is required here, because only for values != 0, 0.5 or 1
             # we get values for plotting
@@ -588,12 +627,22 @@ def analyse_attribute_weight(ctx):
                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                 colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
             set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap.png")
+            # heatmap for tree sizes for diagonal for SetStatistics
+            size_tmp_dt = create_cut_tree_sizes(calculated_dt, "error", "matrix", "SetStatistics", 0.1, "TRUE")
+            diagonal_set_tree_size_heatmap = ggplot2.ggplot(size_tmp_dt) + ggplot2.aes_string(x="cut", y="pcut", fill="mean") + \
+                            ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                colours=brewer.brewer_pal(n=9, name='Reds'), na_value="white", name="Error")
+            diagonal_set_tree_size_heatmap_filename = os.path.join(structure.exploratory_path(), "set_tree_size_heatmap_diagonal.png")
 
             # perform the plotting
             for plot, filename in [(error_heatmap, error_heatmap_filename,),
                                    (set_error_heatmap, set_error_heatmap_filename,),
                                    (tree_size_heatmap, tree_size_heatmap_filename,),
-                                   (set_tree_size_heatmap, set_tree_size_heatmap_filename,)]:
+                                   (set_tree_size_heatmap, set_tree_size_heatmap_filename,),
+                                   (diagonal_error_heatmap, diagonal_error_heatmap_filename,),
+                                   (diagonal_set_error_heatmap, diagonal_set_error_heatmap_filename,),
+                                   (diagonal_tree_size_heatmap, diagonal_tree_size_heatmap_filename,),
+                                   (diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename)]:
                 grdevices.png(filename)
                 plot.plot()
                 grdevices.dev_off()
@@ -605,7 +654,10 @@ def analyse_attribute_weight(ctx):
                 error_heatmap=error_heatmap, error_heatmap_filename=error_heatmap_filename,
                 set_error_heatmap=set_error_heatmap, set_error_heatmap_filename=set_error_heatmap_filename,
                 tree_size_heatmap=tree_size_heatmap, tree_size_heatmap_filename=tree_size_heatmap_filename,
-                set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename
+                set_tree_size_heatmap=set_tree_size_heatmap, set_tree_size_heatmap_filename=set_tree_size_heatmap_filename,
+                diagonal_error_heatmap=diagonal_error_heatmap, diagonal_error_heatmap_filename=diagonal_error_heatmap_filename,
+                diagonal_tree_size_heatmap=diagonal_tree_size_heatmap, diagonal_tree_size_heatmap_filename=diagonal_tree_size_heatmap_filename,
+                diagonal_set_tree_size_heatmap=diagonal_set_tree_size_heatmap, diagonal_set_tree_size_heatmap_filename=diagonal_set_tree_size_heatmap_filename
             )
 
 
