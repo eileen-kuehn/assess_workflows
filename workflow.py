@@ -204,7 +204,7 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
             data = []
             single_tree_paths = to_process.pop(0)
             # prepare blocks of data
-            block_size = len(single_tree_paths) / float(pcount) #/ 4.0
+            block_size = len(single_tree_paths) / float(pcount) / 4.0
             assert block_size > 1, "Blocksize is too small for proper parallelisation: %s" % block_size
             index_value = int(math.ceil(len(single_tree_paths) / block_size))
             for row_idx in range(index_value):
