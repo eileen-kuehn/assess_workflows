@@ -252,7 +252,7 @@ def analyse_metric(ctx):
                         for row_idx, row_value in enumerate(matrix_data):
                             if row_value[0][row_idx] != 0:
                                 diagonal_issue_counter += 1
-                            for col_idx in range(row_idx + 1, len(matrix_data)):
+                            for col_idx in range(row_idx, len(matrix_data)):
                                 if col_idx != row_idx:
                                     if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
                                         symmetry_issue_counter += 1
@@ -280,7 +280,7 @@ def analyse_metric(ctx):
                         else:
                             results += "* Identified %s problems in diagonal" % diagonal_issue_counter
                             results += "\n#### Error for Diagonal\n\n"
-                            diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(diagonals)
+                            diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(diagonals, expected_value=0)
                             results += "* mean relative deviation: %s +- %s\n" % (diagonal_mean, diagonal_error)
                             latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
                                 statistics_algorithm, key.replace("_", ""), diagonal_mean)
