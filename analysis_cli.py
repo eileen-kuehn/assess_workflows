@@ -257,16 +257,16 @@ def analyse_metric(ctx):
                                     if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
                                         symmetry_issue_counter += 1
                                     all_values.append((
-                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
-                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+                                        row_value[0][col_idx] or 0, data_tree_sizes[col_idx] * 2,
+                                        matrix_data[col_idx][0][row_idx] or 0, data_tree_sizes[row_idx] * 2,
                                     ))
                                     if (row_value[0][col_idx] == 0 or
                                             matrix_data[col_idx][0][row_idx] == 0) and col_idx != row_idx:
                                         metric_issue_counter += 1
                                 else:
                                     diagonals.append((
-                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
-                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+                                        row_value[0][col_idx] or 0, data_tree_sizes[col_idx] * 2,
+                                        matrix_data[col_idx][0][row_idx] or 0, data_tree_sizes[row_idx] * 2,
                                     ))
                         results += "\n### Diagonal in data\n\n"
                         results += "--> Diagonal should be equal to 0 everywhere\n\n"
