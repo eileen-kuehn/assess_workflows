@@ -54,7 +54,7 @@ def uncorrelated_relative_max_distance_deviation(values):
     return result / len(values)
 
 
-def uncorrelated_relative_deviation_and_standard_error(values):
+def uncorrelated_relative_deviation_and_standard_error(values, expected_value=None):
     """
     Method returns the mean relative distance derivation and its standard error.
     The standard error of the mean relative deviation estimates how far the sample mean is likely
@@ -66,8 +66,13 @@ def uncorrelated_relative_deviation_and_standard_error(values):
     """
     errors = []
     for left_distance, left_max_distance, right_distance, right_max_distance in values:
-        errors.append((abs(left_distance - right_distance) / 2) /
-                      (left_max_distance + right_max_distance))
+        if expected_value is not None:
+            errors.append((abs(expected_value - left_distance) +
+                           abs(expected_value - right_distance)) / 2 /
+                          (left_max_distance + right_max_distance))
+        else:
+            errors.append((abs(left_distance - right_distance) / 2) /
+                          (left_max_distance + right_max_distance))
     mean = sum(errors) / len(errors)
     sample_sd = math.sqrt(sum([(error - mean)**2 for error in errors]) / (len(errors) - 1)) / \
         math.sqrt(len(errors))
