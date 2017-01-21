@@ -46,11 +46,16 @@ def uncorrelated_relative_distance_deviation(values):
     return result / len(values)
 
 
-def uncorrelated_relative_max_distance_deviation(values):
+def uncorrelated_relative_max_distance_deviation(values, expected_value=None):
     result = 0
     for left_distance, left_max_distance, right_distance, right_max_distance in values:
-        result += (abs(left_distance - right_distance) / 2) / \
-                  (left_max_distance + right_max_distance)
+        if expected_value is not None:
+            result += (abs(expected_value - left_distance) +
+                           abs(expected_value - right_distance)) / 2 / \
+                      (left_max_distance + right_max_distance)
+        else:
+            result += (abs(left_distance - right_distance) / 2) / \
+                      (left_max_distance + right_max_distance)
     return result / len(values)
 
 
