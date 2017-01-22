@@ -224,106 +224,158 @@ def analyse_metric(ctx):
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
+        data = {}
 
         with open(file_path, "r") as input_file:
             analysis_data = json.load(input_file).get("data", None)
 
-            if analysis_data:
-                results += "\n# Metric Analysis\n"
-                algorithm = analysis_data["results"][0]["algorithm"]
-                try:
-                    statistics_algorithm = re.search("cache_statistics=(\w+)", algorithm).group(1)
-                except AttributeError:
-                    statistics_algorithm = "default"
-                decorator_data = analysis_data["results"][0]["decorator"]
-                try:
-                    data_tree_sizes = decorator_data.get("data", {})["prototypes"]["original"][0]
-                except KeyError:
-                    data_tree_sizes = []
-                for key in decorator_data:
-                    if key in ["normalized_matrix", "matrix"]:
-                        results += "\n## %s Analysis\n\n" % key
-                        matrix_data = decorator_data[key]
-                        diagonals = []  # values to calculate diagonal deviation
-                        all_values = []  # values to calculate deviation for all other fields
-                        diagonal_issue_counter = 0
-                        symmetry_issue_counter = 0
-                        metric_issue_counter = 0
-                        for row_idx, row_value in enumerate(matrix_data):
-                            if row_value[0][row_idx] != 0:
-                                diagonal_issue_counter += 1
-                            for col_idx in range(row_idx, len(matrix_data)):
-                                if col_idx != row_idx:
-                                    if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
-                                        symmetry_issue_counter += 1
-                                    all_values.append((
-                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
-                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
-                                    ))
-                                    if (row_value[0][col_idx] == 0 or
-                                            matrix_data[col_idx][0][row_idx] == 0) and col_idx != row_idx:
-                                        metric_issue_counter += 1
-                                else:
-                                    diagonals.append((
-                                        row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
-                                        matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
-                                    ))
-                        results += "\n### Diagonal in data\n\n"
-                        results += "--> Diagonal should be equal to 0 everywhere\n\n"
-                        if diagonal_issue_counter == 0:
-                            results += "* No issues found with diagonal\n"
-                            latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), 0)
-                            latex_results += "% sample standard deviation\n"
-                            latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), 0)
-                        else:
-                            results += "* Identified %s problems in diagonal" % diagonal_issue_counter
-                            results += "\n#### Error for Diagonal\n\n"
-                            diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(diagonals, expected_value=0)
-                            results += "* mean relative deviation: %s +- %s\n" % (diagonal_mean, diagonal_error)
-                            latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), diagonal_mean)
-                            latex_results += "% sample standard deviation\n"
-                            latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), diagonal_error)
-                        results += "\n### Symmetry in data\n\n"
-                        results += "--> Data should be equal when distance is a metric\n\n"
-                        if symmetry_issue_counter == 0:
-                            results += "* No issues found with symmetry\n"
-                            latex_results += "\\def\%srelativemean%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), 0)
-                            latex_results += "% sample standard deviation\n"
-                            latex_results += "\\def\%srelativessd%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), 0)
-                        else:
-                            results += "* Identified %s problems in symmetry" % symmetry_issue_counter
-                            results += "\n#### Error for Symmetry\n\n"
-                            field_mean, field_error = uncorrelated_relative_deviation_and_standard_error(all_values)
-                            results += "* uncorrelated mean relative deviation: %s +- %s\n" % (field_mean, field_error)
-                            latex_results += "\\def\%srelativemean%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), field_mean)
-                            latex_results += "% sample standard deviation\n"
-                            latex_results += "\\def\%srelativessd%s{%s}\n" % (
-                                statistics_algorithm, key.replace("_", ""), field_error)
-                        results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
-                        results += "--> For a metric different objects can never have distance 0\n\n"
-                        if metric_issue_counter == 0:
-                            results += "* No issues found with equality, distance might be a metric\n"
-                        else:
-                            results += "* Identified %s problems with equality\n" % metric_issue_counter
-                            results += "* Distance is no metric, but might be a pseudo-metric\n"
-                results += "## Files for further reference\n\n"
-                for index, current_file in enumerate(analysis_data["files"]):
-                    results += "* [%s]: %s\n" % (index, current_file)
+            for result_idx, result in enumerate(analysis_data.get("results", [])):
+                for result_entry in result:
+                    algorithm = result_entry.get("algorithm", None)
+                    decorator_data = result_entry.get("decorator", {}).get("matrix", [])
+                    tree_sizes = result_entry.get("decorator", {}).get("data", [])["prototypes"]["original"][0]
+                    diagonal_issues = other_issues = 0
+                    diagonal_values = []
+                    other_values = []
+                    for row_idx, row_data in enumerate(decorator_data):
+                        for col_idx in range(row_idx, len(decorator_data)):
+                            if row_idx == col_idx:
+                                value = row_data[0][col_idx]
+                                # we got the diagonal, so check
+                                diagonal_values.append(
+                                    (value, tree_sizes[row_idx] * 2,
+                                     value, tree_sizes[col_idx] * 2,))
+                                if value != 0:
+                                    diagonal_issues += 1
+                            else:
+                                # we got each other value, so check
+                                left_value = row_data[0][col_idx]
+                                right_value = decorator_data[col_idx][0][row_idx]
+                                other_values.append(
+                                    (left_value, tree_sizes[row_idx] * 2,
+                                     right_value, tree_sizes[col_idx] * 2,))
+                                if left_value != right_value:
+                                    other_issues += 1
+                    current_algorithm = data.setdefault(algorithm, {})
+                    try:
+                        current_algorithm["diagonal"].extend(diagonal_values)
+                        current_algorithm["other"].extend(other_values)
+                    except KeyError:
+                        current_algorithm["diagonal"] = diagonal_values
+                        current_algorithm["other"] = other_values
+            for key, values in data.items():
+                statistics_algorithm = re.search("cache_statistics=(\w+)", key).group(1)
+                statistics_variant = int(float(re.search("weight=(\d\.\d)", key).group(1)) * 10)
+                diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(
+                    values["diagonal"], 0)
+                other_mean, other_error = uncorrelated_relative_deviation_and_standard_error(
+                    values["other"])
+                # save results
+                latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
+                    statistics_algorithm, chr(statistics_variant + 97), diagonal_mean)
+                latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
+                    statistics_algorithm, chr(statistics_variant + 97), diagonal_error)
+                latex_results += "\\def\%srelativemean%s{%s}\n" % (
+                    statistics_algorithm, chr(statistics_variant + 97), other_mean)
+                latex_results += "\\def\%srelativessd%s{%s}\n" % (
+                    statistics_algorithm, chr(statistics_variant + 97), other_error)
 
-    output_results(
-        ctx=ctx,
-        results=results,
-        version=determine_version(os.path.dirname(assess_workflows.__file__)),
-        source="%s (%s)" % (__file__, "analyse_metric"),
-        file_type="md"
-    )
+            # if analysis_data:
+            #     results += "\n# Metric Analysis\n"
+            #     algorithm = analysis_data["results"][0]["algorithm"]
+            #     try:
+            #         statistics_algorithm = re.search("cache_statistics=(\w+)", algorithm).group(1)
+            #     except AttributeError:
+            #         statistics_algorithm = "default"
+            #     decorator_data = analysis_data["results"][0]["decorator"]
+            #     try:
+            #         data_tree_sizes = decorator_data.get("data", {})["prototypes"]["original"][0]
+            #     except KeyError:
+            #         data_tree_sizes = []
+            #     for key in decorator_data:
+            #         if key in ["normalized_matrix", "matrix"]:
+            #             results += "\n## %s Analysis\n\n" % key
+            #             matrix_data = decorator_data[key]
+            #             diagonals = []  # values to calculate diagonal deviation
+            #             all_values = []  # values to calculate deviation for all other fields
+            #             diagonal_issue_counter = 0
+            #             symmetry_issue_counter = 0
+            #             metric_issue_counter = 0
+            #             for row_idx, row_value in enumerate(matrix_data):
+            #                 if row_value[0][row_idx] != 0:
+            #                     diagonal_issue_counter += 1
+            #                 for col_idx in range(row_idx, len(matrix_data)):
+            #                     if col_idx != row_idx:
+            #                         if row_value[0][col_idx] != matrix_data[col_idx][0][row_idx]:
+            #                             symmetry_issue_counter += 1
+            #                         all_values.append((
+            #                             row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
+            #                             matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+            #                         ))
+            #                         if (row_value[0][col_idx] == 0 or
+            #                                 matrix_data[col_idx][0][row_idx] == 0) and col_idx != row_idx:
+            #                             metric_issue_counter += 1
+            #                     else:
+            #                         diagonals.append((
+            #                             row_value[0][col_idx], data_tree_sizes[col_idx] * 2,
+            #                             matrix_data[col_idx][0][row_idx], data_tree_sizes[row_idx] * 2,
+            #                         ))
+            #             results += "\n### Diagonal in data\n\n"
+            #             results += "--> Diagonal should be equal to 0 everywhere\n\n"
+            #             if diagonal_issue_counter == 0:
+            #                 results += "* No issues found with diagonal\n"
+            #                 latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), 0)
+            #                 latex_results += "% sample standard deviation\n"
+            #                 latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), 0)
+            #             else:
+            #                 results += "* Identified %s problems in diagonal" % diagonal_issue_counter
+            #                 results += "\n#### Error for Diagonal\n\n"
+            #                 diagonal_mean, diagonal_error = uncorrelated_relative_deviation_and_standard_error(diagonals, expected_value=0)
+            #                 results += "* mean relative deviation: %s +- %s\n" % (diagonal_mean, diagonal_error)
+            #                 latex_results += "\\def\%srelativediagonalmean%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), diagonal_mean)
+            #                 latex_results += "% sample standard deviation\n"
+            #                 latex_results += "\\def\%srelativediagonalssd%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), diagonal_error)
+            #             results += "\n### Symmetry in data\n\n"
+            #             results += "--> Data should be equal when distance is a metric\n\n"
+            #             if symmetry_issue_counter == 0:
+            #                 results += "* No issues found with symmetry\n"
+            #                 latex_results += "\\def\%srelativemean%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), 0)
+            #                 latex_results += "% sample standard deviation\n"
+            #                 latex_results += "\\def\%srelativessd%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), 0)
+            #             else:
+            #                 results += "* Identified %s problems in symmetry" % symmetry_issue_counter
+            #                 results += "\n#### Error for Symmetry\n\n"
+            #                 field_mean, field_error = uncorrelated_relative_deviation_and_standard_error(all_values)
+            #                 results += "* uncorrelated mean relative deviation: %s +- %s\n" % (field_mean, field_error)
+            #                 latex_results += "\\def\%srelativemean%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), field_mean)
+            #                 latex_results += "% sample standard deviation\n"
+            #                 latex_results += "\\def\%srelativessd%s{%s}\n" % (
+            #                     statistics_algorithm, key.replace("_", ""), field_error)
+            #             results += "\n### Checking for Metric vs. Pseudo-Metric\n\n"
+            #             results += "--> For a metric different objects can never have distance 0\n\n"
+            #             if metric_issue_counter == 0:
+            #                 results += "* No issues found with equality, distance might be a metric\n"
+            #             else:
+            #                 results += "* Identified %s problems with equality\n" % metric_issue_counter
+            #                 results += "* Distance is no metric, but might be a pseudo-metric\n"
+            #     results += "## Files for further reference\n\n"
+            #     for index, current_file in enumerate(analysis_data["files"]):
+            #         results += "* [%s]: %s\n" % (index, current_file)
+
+    # output_results(
+    #     ctx=ctx,
+    #     results=results,
+    #     version=determine_version(os.path.dirname(assess_workflows.__file__)),
+    #     source="%s (%s)" % (__file__, "analyse_metric"),
+    #     file_type="md"
+    # )
     output_results(
         ctx=ctx,
         results=latex_results,
