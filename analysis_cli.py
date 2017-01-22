@@ -242,6 +242,8 @@ def analyse_metric(ctx):
                             if row_idx == col_idx:
                                 value = row_data[0][col_idx]
                                 # we got the diagonal, so check
+                                if value is None:
+                                    continue
                                 diagonal_values.append(
                                     (value, tree_sizes[row_idx] * 2,
                                      value, tree_sizes[col_idx] * 2,))
@@ -249,6 +251,8 @@ def analyse_metric(ctx):
                                     diagonal_issues += 1
                             else:
                                 # we got each other value, so check
+                                if left_value is None or right_value is None:
+                                    continue
                                 left_value = row_data[0][col_idx]
                                 right_value = decorator_data[col_idx][0][row_idx]
                                 other_values.append(
