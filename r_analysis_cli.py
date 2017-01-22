@@ -510,9 +510,13 @@ def analyse_attribute_weight(ctx):
                             for index, ensemble in enumerate(decorator):
                                 for tree in ensemble:
                                     for column_index in range(index + 1):
+                                        left_value = tree[column_index]
+                                        right_value = decorator[column_index][0][index]
+                                        if left_value is None or right_value is None:
+                                            continue
                                         error = uncorrelated_relative_max_distance_deviation([
-                                            (tree[column_index], data_tree_sizes[index] * 2,
-                                             decorator[column_index][0][index], data_tree_sizes[column_index] * 2,)
+                                            (left_value, data_tree_sizes[index] * 2,
+                                             right_value, data_tree_sizes[column_index] * 2,)
                                         ], None if index != column_index else 0)
                                         result_indexes.append(result_index)
                                         weights.append(weight)
