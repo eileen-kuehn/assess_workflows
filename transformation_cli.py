@@ -1,4 +1,6 @@
 import os
+import re
+import csv
 import json
 
 import assess_workflows
@@ -109,9 +111,34 @@ def transform_matrix_to_sql(ctx):
             source="%s (%s)" % (__file__, "transform_matrix_to_sql")
         )
 
+
+@click.command()
+@click.option("--paths", "paths", type=click.Path(), multiple=True,
+              help="Path of mapping results to consider for SQL generation.")
+@click.pass_context
+def transform_mapping_to_sql(ctx, paths):
+    if ctx.obj.get("use_input", False) or len(paths) > 0:
+        result = ""
+        update_cmd = "update payload_result set payload_id='%s' where id=%s;\n"
+
+        for path in paths:
+            print("starting with %s" % path)
+            with open(path, "r") as input_file:
+                reader = csv.reader(input_file, quotechar="'")
+                for row in reader:
+                    result += update_cmd % (re.match("([\d-]+)", row[1]).group(), re.match("(\d+)", row[0]).group())
+
+        output_results(
+            ctx=ctx,
+            results=result + ";",
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "transform_mapping_to_sql")
+        )
+
 cli.add_command(transform_matrix_to_adjacency_list)
 cli.add_command(transform_matrix_to_sql)
 cli.add_command(transform_matrix_to_csv)
+cli.add_command(transform_mapping_to_sql)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
