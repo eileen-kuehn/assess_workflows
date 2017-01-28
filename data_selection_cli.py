@@ -210,8 +210,8 @@ def index_data_by_activity(ctx):
                                           "inner join job on job.id=payload.job_id "
                                           "where payload_id!=%%s and"
                                           "(activity=%%s or activity=%%s or activity=%%s or activity=%%s) and "
-                                          "(status_name=%%s or status_name=%%s)" % ",".join(fields),
-                                      ["", "reprocessing", "production", "analysis", "analysis-crab3", "SUCCEEDED", "FAILED"])
+                                          "(status_name=%%s or status_name=%%s or status_name=%%s or status_name=%%s)" % ",".join(fields),
+                                      ["", "reprocessing", "production", "analysis", "analysis-crab3", "SUCCEEDED", "FAILED", "DONE", "ABORTED"])
         for sql_result in sql_results:
             result = dict(zip(fields, sql_result))
             current_result = results.setdefault(result["activity"], {})
