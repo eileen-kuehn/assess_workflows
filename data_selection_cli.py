@@ -443,8 +443,9 @@ def aggregate_samples(ctx):
                     while to_check:
                         current_item = to_check.pop(0)
                         try:
-                            _, value = current_item.popitem()
-                            to_check.append(value)
+                            while current_item:
+                                _, value = current_item.popitem()
+                                to_check.append(value)
                         except KeyError:
                             results.setdefault(key, []).append(current_item)
                         except AttributeError:
