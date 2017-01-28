@@ -430,13 +430,25 @@ def aggregate_samples(ctx):
             input_data = json.load(input_file).get("data", None)
 
             for key, values in input_data.items():
-                if len(values[0]) > 1:
-                    # flattening data
-                    results.setdefault(key, []).append(
-                        [element for value in values[0] for element in value])
-                else:
-                    # data can be kept
-                    results.setdefault(key, []).append(values[0])
+                try:
+                    if len(values[0]) > 1:
+                        # flattening data
+                        results.setdefault(key, []).append(
+                            [element for value in values[0] for element in value])
+                    else:
+                        # data can be kept
+                        results.setdefault(key, []).append(values[0])
+                except KeyError:
+                    to_check = [values]
+                    while to_check:
+                        current_item = to_check.pop(0)
+                        try:
+                            _, value = current_item.popitem()
+                            to_check.append(value)
+                        except KeyError:
+                            results.setdefault(key, []).append(current_item)
+                        except AttributeError:
+                            results.setdefault(key, []).extend(current_item)
 
     output_results(
         ctx=ctx,
