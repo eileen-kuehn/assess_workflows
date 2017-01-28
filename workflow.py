@@ -10,7 +10,7 @@ import cPickle as pickle
 
 from assess.exceptions.exceptions import EventNotSupportedException
 from assess.generators.event_generator import NodeGenerator
-from assess_workflows.utils.multicoreresult import MulticoreResult
+from assess_workflows.utils.multicoreresult import MulticoreResult, multicore_factor
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
 
@@ -204,7 +204,8 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
             data = []
             single_tree_paths = to_process.pop(0)
             # prepare blocks of data
-            block_size = len(single_tree_paths) / float(pcount) / 4.0
+            factor = multicore_factor(len(single_tree_paths))
+            block_size = len(single_tree_paths) / float(factor)
             assert block_size > 1, "Blocksize is too small for proper parallelisation: %s" % block_size
             index_value = int(math.ceil(len(single_tree_paths) / block_size))
             for row_idx in range(index_value):
