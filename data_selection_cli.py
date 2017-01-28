@@ -203,7 +203,7 @@ def index_data_by_activity(ctx):
     results = {}
     with SQLCommand(providerName="PostgresDBProvider",
                     connectionString="dbname=gnm user=gnm") as sql_command:
-        fields = ["payload_id", "activity", "status_name", "workernode.name", "job.run"]
+        fields = ["payload_id", "activity", "task_monitor_id", "status_name", "workernode.name", "job.run"]
         sql_results = sql_command.execute("select %s from payload_result "
                                           "inner join workernode on payload_result.workernode_id=workernode.id "
                                           "inner join payload on payload_result.payload_id=payload.id "
@@ -215,7 +215,7 @@ def index_data_by_activity(ctx):
         for sql_result in sql_results:
             result = dict(zip(fields, sql_result))
             current_result = results.setdefault(result["activity"], {})
-            current_result.setdefault(result["status_name"], []).append(
+            current_result.setdefault(result["status_name"], {}).setdefault(result["task_monitor_id"], []).append(
                 os.path.join("/home/fq8360/data/gnm/payloads", os.path.join(
                     os.path.join(result["workernode.name"], result["job.run"]),
                     "%s-process.csv" % result["payload_id"])))
