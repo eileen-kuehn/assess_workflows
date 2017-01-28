@@ -8,6 +8,7 @@ import subprocess
 
 from assess.exceptions.exceptions import TreeInvalidatedException
 from assess_workflows.utils.multicoreresult import MulticoreResult
+from dbutils.sqlcommand import SQLCommand
 from gnmutils.exceptions import DataNotInCacheException
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -194,6 +195,37 @@ def index_data_by_number_of_events(ctx, paths):
         version=determine_version(os.path.dirname(assess_workflows.__file__)),
         source="%s (%s)" % (__file__, "index_data_by_number_of_events")
     )
+
+
+@click.command()
+@click.pass_context
+def index_data_by_activity(ctx):
+    results = {}
+    with SQLCommand(providerName="PostgresDBProvider",
+                    connectionString="dbname=gnm user=gnm") as sql_command:
+        fields = ["payload_id", "activity", "status_name", "workernode.name", "job.run"]
+        sql_results = sql_command.execute("select %s from payload_result "
+                                          "inner join workernode on payload_result.workernode_id=workernode.id "
+                                          "inner join payload on payload_result.payload_id=payload.id "
+                                          "inner join job on job.id=payload.job_id "
+                                          "where payload_id!=%%s and"
+                                          "(activity=%%s or activity=%%s) and "
+                                          "(status_name=%%s or status_name=%%s or status_name=%%s or status_name=%%s)" % ",".join(fields),
+                                      ["", "reprocessing", "production", "analysis", "analysis-crab3", "SUCCEEDED", "FAILED"])
+        for sql_result in sql_results:
+            result = dict(zip(fields, sql_result))
+            current_result = results.setdefault(result["activity"], {})
+            current_result.setdefault(result["status_name"], []).append(
+                os.path.join("/home/fq8360/data/gnm/payloads", os.path.join(
+                    os.path.join(result["workernode.name"], result["job.run"]),
+                    "%s-process.csv" % result["payload_id"])))
+    if ctx.obj.get("save", False):
+        output_results(
+            ctx=ctx,
+            results=results,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "index_data_by_activity")
+        )
 
 
 @click.command()
@@ -506,6 +538,7 @@ cli.add_command(index_data_by_uid)
 cli.add_command(index_data_by_number_of_nodes)
 cli.add_command(index_data_by_number_of_traffic_events)
 cli.add_command(index_data_by_number_of_events)
+cli.add_command(index_data_by_activity)
 cli.add_command(index_process_names)
 cli.add_command(index_tree_statistics)
 cli.add_command(squish_index_into_ranges)
