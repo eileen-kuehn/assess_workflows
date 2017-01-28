@@ -29,27 +29,30 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 
 
 @click.command()
+@click.option("--symmetric", "symmetric", default=True)
 @click.pass_context
-def transform_matrix_to_adjacency_list(ctx):
+def transform_matrix_to_adjacency_list(ctx, symmetric):
     if ctx.obj.get("use_input", False):
         ctx.obj["json"] = True
-        result = {}
+        results = {}
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
 
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data", None)
             files = input_data["files"]
-            data = input_data["results"][0]["decorator"]["normalized_matrix"]
-            for row_idx, row in enumerate(data):
-                result[files[row_idx]] = {}
-                for col_idx, col in enumerate(row[0]):
-                    if col_idx == row_idx:
-                        continue
-                    result[files[row_idx]][files[col_idx]] = col
+            for result_idx, result in enumerate(input_data["results"][0]):
+                decorator = result["decorator"]["normalized_matrix"]
+                for row_idx, row in enumerate(decorator):
+                    for col_idx, col in enumerate(row[0]):
+                        if col_idx == row_idx:
+                            continue
+                        results.setdefault(files[result_idx][row_idx], {})[files[result_idx][col_idx]] = col
+                        if symmetric:
+                            results.setdefault(files[result_idx][col_idx], {})[files[result_idx][row_idx]] = col
         output_results(
             ctx=ctx,
-            results=result,
+            results=results,
             version=determine_version(os.path.dirname(assess_workflows.__file__)),
             source="%s (%s)" % (__file__, "transform_matrix_to_adjacency_list")
         )
@@ -59,26 +62,27 @@ def transform_matrix_to_adjacency_list(ctx):
 @click.pass_context
 def transform_matrix_to_csv(ctx):
     if ctx.obj.get("use_input", False):
-        result = ""
+        results = ""
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
 
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data", None)
-
-            data = input_data["results"][0]["decorator"]["normalized_matrix"]
-            maximum_index = len(data)
-            result += "%s\n" % ",".join([str(number) for number in range(1, maximum_index+1)])
-            for row_index in xrange(0, maximum_index):
-                # write first part of matrix: 0 - index
-                result += "%s" % ",".join([str(element) for element in data[row_index][0:row_index]])
-                # write second part of matrix: 1 - len(data)
-                for col_index in xrange(row_index, maximum_index):
-                    result += ",%s" % str(data[col_index][row_index])
-                result += "\n"
+            files = input_data["files"]
+            for result_idx, result in enumerate(input_data["results"][0]):
+                decorator = result["decorator"]["normalized_matrix"]
+                maximum_index = len(decorator)
+                results += ",".join(files[result_idx])
+                results += "\n"
+                for row_index in xrange(0, maximum_index):
+                    row = [0 for _ in xrange(row_index+1)]
+                    for col_index in xrange(row_index+1, maximum_index):
+                        row.append(decorator[col_index][0][row_index])
+                    results += "%s\n" % ",".join([str(item) for item in row])
         output_results(
             ctx=ctx,
-            results=result,
+            results=results,
+            file_type="csv",
             version=determine_version(os.path.dirname(assess_workflows.__file__)),
             source="%s (%s)" % (__file__, "transform_matrix_to_csv")
         )
