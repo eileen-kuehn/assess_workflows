@@ -359,8 +359,18 @@ def subset_data(ctx, include_key):
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data", None)
             for key, value in input_data.items():
-                if include_key(key, value):
-                    results[key] = value
+                if isinstance(value, dict):
+                    for inner_key, inner_value in value.items():
+                        if isinstance(inner_value, dict):
+                            for inner_inner_key, inner_inner_value in inner_value.items():
+                                if include_key(inner_inner_key, inner_inner_value):
+                                    results.setdefault(key, {}).setdefault(inner_key, {})[inner_inner_key] = inner_inner_value
+                        else:
+                            if include_key(inner_key, inner_value):
+                                results.setdefault(key, {})[inner_key] = inner_value
+                else:
+                    if include_key(key, value):
+                        results[key] = value
 
     output_results(
         ctx=ctx,
