@@ -12,3 +12,12 @@ class MulticoreResult(dict):
             except AttributeError:
                 reference.extend(other_reference)
         return self
+
+
+def multicore_factor(problem_size, min_size=100):
+    if problem_size < min_size * 2:
+        return 1
+    result = 10
+    while problem_size / result > min_size:
+        result += 1
+    return result
