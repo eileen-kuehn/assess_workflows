@@ -835,6 +835,70 @@ def analyse_attribute_metric(ctx, seed):
         )
 
 
+@click.command()
+@click.pass_context
+def analyse_clustering_score(ctx):
+    structure = ctx.obj.get("structure")
+
+    if ctx.obj.get("save", False):
+        if ctx.obj.get("use_input", False):
+            file_path = structure.input_file_path()
+            with open(file_path, "r") as input_file:
+                from rpy2.robjects.packages import importr
+                import rpy2.robjects.lib.ggplot2 as ggplot2
+                from rpy2.robjects.lib.dplyr import DataFrame
+                from rpy2 import robjects
+
+                base = importr("base")
+                stats = importr("stats")
+                grdevices = importr("grDevices")
+                datatable = importr("data.table")
+                brewer = importr("RColorBrewer")
+
+                scores = []
+                epsilons = []
+                etas = []
+                noise_counts = []
+                cluster_counts = []
+                input_data = json.load(input_file).get("data", None)
+                # first collect the data for the first data.table before creating the next one
+                for result_index, result in enumerate(input_data.get("results", [])):
+                    # collect the scores
+                    scores.append(result.get("scores", {}).get("silhouette_score", 0))
+                    epsilons.append(result.get("meta", {}).get("epsilon", 0))
+                    etas.append(result.get("meta", {}).get("eta", 0))
+                    noise_counts.append(len(result.get("noise", [])))
+                    cluster_counts.append(len(result.get("clusters", [])))
+                result_dt = datatable.data_table(score=base.unlist(scores),
+                                                 epsilon=base.unlist(epsilons),
+                                                 eta=base.unlist(etas),
+                                                 noise_count=base.unlist(noise_counts),
+                                                 cluster_count=base.unlist(cluster_counts))
+
+                score_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="score") + \
+                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                    colours=brewer.brewer_pal(n=9, name="Greens"), na_value="white", name="Score")
+                score_filename = os.path.join(structure.exploratory_path(), "score.png")
+
+                noise_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="noise_count/1000") + \
+                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                    colours=brewer.brewer_pal(n=9, name="Reds"), na_value="white", name="Noise")
+                noise_filename = os.path.join(structure.exploratory_path(), "noise.png")
+
+                # perform the plotting
+                for plot, filename in [(score_plot, score_filename,),
+                                       (noise_plot, noise_filename,)]:
+                    grdevices.png(filename)
+                    plot.plot()
+                    grdevices.dev_off()
+        # save model for further adaptations
+        rdata_filename = structure.intermediate_file_path(file_type="RData")
+        output_r_data(
+            ctx=ctx, filename=rdata_filename, result_dt=result_dt, score_plot=score_plot,
+            score_filename=score_filename, noise_plot=noise_plot, noise_filename=noise_filename
+        )
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -942,6 +1006,7 @@ cli.add_command(analyse_diamond_perturbations)
 cli.add_command(analyse_diamond_level)
 cli.add_command(analyse_attribute_metric)
 cli.add_command(analyse_attribute_weight)
+cli.add_command(analyse_clustering_score)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
