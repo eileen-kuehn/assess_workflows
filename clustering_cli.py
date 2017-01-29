@@ -7,6 +7,7 @@ import logging
 
 import assess_workflows
 from assess_workflows.utils.utils import output_results, determine_version
+from dengraph.graphs import graph_io
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
 
@@ -55,34 +56,55 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
         configuration = ctx.obj.get("configurations", None)[0]
         signature = configuration.get("signatures", [None])[0]
         distance = configuration.get("distances", [None])[0]
+        # FIXME :I might also need cache statistics
         structure = ctx.obj.get("structure", None)
-        file_path = structure.input_file_path()
-
+        file_path = structure.input_file_path(file_type="csv")  # expecting csv file
         tree_builder = CSVTreeBuilder()
-        adjacency_dict = {}
-        with open(file_path, "r") as input_file:
-            input_data = json.load(input_file).get("data", None)
-            signature_cache = {}
-            for tree_idx, tree_path in enumerate(input_data["files"]):
-                tree = tree_builder.build(tree_path)
-                tree_index = tree.to_index(
-                    signature=signature,
-                    start_support=distance.supported.get(ProcessStartEvent, False),
-                    exit_support=distance.supported.get(ProcessExitEvent, False),
-                    traffic_support=distance.supported.get(TrafficEvent, False))
-                tree_index.key = tree_path
-                signature_cache[tree_idx] = tree_index
-            data = input_data["results"][0]["decorator"]["normalized_matrix"]
-            for row_idx, row in enumerate(data):
-                adjacency_dict[signature_cache[row_idx]] = {}
-                for col_idx, col in enumerate(row[0]):
-                    if col_idx == row_idx:
-                        continue
-                    adjacency_dict[signature_cache[row_idx]][signature_cache[col_idx]] = col
+
+        def header_to_cache(file_path):
+            tree = tree_builder.build(file_path)
+            # FIXME: does it work as expected?
+            tree_index = tree.to_index(
+                signature=signature,
+                start_support=distance.supported.get(ProcessStartEvent, False),
+                exit_support=distance.supported.get(ProcessExitEvent, False),
+                traffic_support=distance.supported.get(TrafficEvent, False)
+            )
+            tree_index.key = file_path
+            return tree_index
+
+        with open(file_path) as csv_file:
+            # load the graph from precalculated csv distance values
+            graph = graph_io.csv_graph_reader(
+                (ln for ln in csv_file if ln[0] != '#' and ln != '\n'),
+                nodes_header=header_to_cache,
+                symmetric=True)
+
+        # adjacency_dict = {}
+        # with open(file_path, "r") as input_file:
+        #     input_data = json.load(input_file).get("data", None)
+        #     signature_cache = {}
+        #     for tree_idx, tree_path in enumerate(input_data["files"]):
+        #         tree = tree_builder.build(tree_path)
+        #         tree_index = tree.to_index(
+        #             signature=signature,
+        #             start_support=distance.supported.get(ProcessStartEvent, False),
+        #             exit_support=distance.supported.get(ProcessExitEvent, False),
+        #             traffic_support=distance.supported.get(TrafficEvent, False))
+        #         tree_index.key = tree_path
+        #         signature_cache[tree_idx] = tree_index
+        #     data = input_data["results"][0]["decorator"]["normalized_matrix"]
+        #     for row_idx, row in enumerate(data):
+        #         adjacency_dict[signature_cache[row_idx]] = {}
+        #         for col_idx, col in enumerate(row[0]):
+        #             if col_idx == row_idx:
+        #                 continue
+        #             adjacency_dict[signature_cache[row_idx]][signature_cache[col_idx]] = col
         # perform the clustering
+
         start = time.time()
         clustering = DenGraphIO(
-            base_graph=AdjacencyGraph(source=adjacency_dict),
+            base_graph=graph,
             cluster_distance=epsilon,
             core_neighbours=eta)
         end = time.time()
