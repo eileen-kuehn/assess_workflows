@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 
 import click
 import rpy2
@@ -844,6 +845,67 @@ def analyse_clustering_score(ctx):
         if ctx.obj.get("use_input", False):
             file_path = structure.input_file_path()
             with open(file_path, "r") as input_file:
+                original_file_path = structure.intermediate_file_path(step=1)
+                with open(original_file_path, "r") as original_file:
+                    original_data = json.load(original_file).get("data", None)
+                    input_data = json.load(input_file).get("data", None)
+
+                    def match_categories(member):
+                        for activity, activity_values in original_data.items():
+                            for status, status_values in activity_values.items():
+                                for task, task_values in status_values.items():
+                                    if member in task_values:
+                                        return activity, status, task
+                        return None, None, None
+
+                    scores = []
+                    epsilons = []
+                    etas = []
+                    noise_counts = []
+                    results = []
+                    for result_idx, result in enumerate(input_data.get("results", [])):
+                        scores.append(result.get("scores", {}).get("silhouette_score", 0))
+                        epsilons.append(result.get("meta", {}).get("epsilon", 0))
+                        etas.append(result.get("meta", {}).get("eta", 0))
+                        noise_counts.append(len(result.get("noise", [])))
+                        results.append({"clusters": []})
+                        for cluster_idx, cluster in enumerate(result.get("clusters", [])):
+                            results[-1]["clusters"].append({})
+                            for member in cluster:
+                                # for each member, check its activity, status, and task
+                                activity, status, task = match_categories(member)
+                                results[-1]["clusters"][-1].setdefault(activity, {}).setdefault(
+                                    status, {}).setdefault(task, []).append(member)
+
+                    class_names = []
+                    class_counts = []
+                    cluster_indexes = []
+                    result_indexes = []
+                    many_etas = []
+                    many_epsilons = []
+                    for result_idx, result in enumerate(results):
+                        for cluster_idx, cluster in enumerate(result.get("clusters", [])):
+                            for activity, status_values in cluster.items():
+                                for status, campaign_values in status_values.items():
+                                    count = {}
+                                    for campaign, elements in campaign_values.items():
+                                        try:
+                                            element_key = "%s_%s_%s" % (activity, status, campaign.split("-")[1])
+                                        except IndexError:
+                                            element_key = "%s_%s_%s" % (activity, status, campaign)
+                                        try:
+                                            count[element_key] += len(elements)
+                                        except KeyError:
+                                            count[element_key] = len(elements)
+                                    for key, items in count.items():
+                                        # add the final values
+                                        cluster_indexes.append(cluster_idx)
+                                        result_indexes.append(result_idx)
+                                        class_names.append(key)
+                                        class_counts.append(items)
+                                        many_etas.append(etas[result_idx])
+                                        many_epsilons.append(epsilons[result_idx])
+
                 from rpy2.robjects.packages import importr
                 import rpy2.robjects.lib.ggplot2 as ggplot2
                 from rpy2.robjects.lib.dplyr import DataFrame
@@ -855,39 +917,43 @@ def analyse_clustering_score(ctx):
                 datatable = importr("data.table")
                 brewer = importr("RColorBrewer")
 
-                scores = []
-                epsilons = []
-                etas = []
-                noise_counts = []
-                cluster_counts = []
-                input_data = json.load(input_file).get("data", None)
-                # first collect the data for the first data.table before creating the next one
-                for result_index, result in enumerate(input_data.get("results", [])):
-                    # collect the scores
-                    scores.append(result.get("scores", {}).get("silhouette_score", 0))
-                    epsilons.append(result.get("meta", {}).get("epsilon", 0))
-                    etas.append(result.get("meta", {}).get("eta", 0))
-                    noise_counts.append(len(result.get("noise", [])))
-                    cluster_counts.append(len(result.get("clusters", [])))
-                result_dt = datatable.data_table(score=base.unlist(scores),
-                                                 epsilon=base.unlist(epsilons),
-                                                 eta=base.unlist(etas),
-                                                 noise_count=base.unlist(noise_counts),
-                                                 cluster_count=base.unlist(cluster_counts))
+                small_dt = datatable.data_table(score=base.unlist(scores),
+                                                epsilon=base.unlist(epsilons),
+                                                eta=base.unlist(etas),
+                                                noise_count=base.unlist(noise_counts),)
+                result_dt = datatable.data_table(eta=base.unlist(many_etas),
+                                                 epsilon=base.unlist(many_epsilons),
+                                                 count=base.unlist(class_counts),
+                                                 name=base.unlist(class_names),
+                                                 result=base.unlist(result_indexes),
+                                                 cluster=base.unlist(cluster_indexes))
 
-                score_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="score") + \
+                score_plot = ggplot2.ggplot(small_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="score") + \
                              ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                     colours=brewer.brewer_pal(n=9, name="Greens"), na_value="white", name="Score")
                 score_filename = os.path.join(structure.exploratory_path(), "score.png")
 
-                noise_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="noise_count/1000") + \
+                noise_plot = ggplot2.ggplot(small_dt) + ggplot2.aes_string(x="eta", y="epsilon", fill="noise_count/1000") + \
                              ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
                     colours=brewer.brewer_pal(n=9, name="Reds"), na_value="white", name="Noise")
                 noise_filename = os.path.join(structure.exploratory_path(), "noise.png")
 
+                summarized_values = (DataFrame(result_dt)
+                                     .group_by("cluster", "result", "eta", "epsilon")
+                                     .summarize(purity="max(count)/sum(count)"))
+                purity_values = (DataFrame(summarized_values)
+                                 .group_by("eta", "epsilon")
+                                 .summarize(purity_mean="mean(purity)"))
+
+                purity_plot = ggplot2.ggplot(purity_values) + ggplot2.aes_string(x="eta", y="epsilon", fill="purity_mean") + \
+                             ggplot2.geom_tile(color="white", size=.1) + ggplot2.scale_fill_gradientn(
+                    colours=brewer.brewer_pal(n=9, name="Greens"), na_value="white", name="Purity")
+                purity_filename = os.path.join(structure.exploratory_path(), "purity.png")
+
                 # perform the plotting
                 for plot, filename in [(score_plot, score_filename,),
-                                       (noise_plot, noise_filename,)]:
+                                       (noise_plot, noise_filename,),
+                                       (purity_plot, purity_filename,)]:
                     grdevices.png(filename)
                     plot.plot()
                     grdevices.dev_off()
@@ -895,7 +961,8 @@ def analyse_clustering_score(ctx):
         rdata_filename = structure.intermediate_file_path(file_type="RData")
         output_r_data(
             ctx=ctx, filename=rdata_filename, result_dt=result_dt, score_plot=score_plot,
-            score_filename=score_filename, noise_plot=noise_plot, noise_filename=noise_filename
+            score_filename=score_filename, noise_plot=noise_plot, noise_filename=noise_filename,
+            purity_plot=purity_plot, purity_filename=purity_filename, small_dt=small_dt
         )
 
 
