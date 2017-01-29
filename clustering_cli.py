@@ -93,7 +93,7 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                 clustering.graph.distance = cluster_distance
                 print("---> performed clustering with eta %s and epsilon %s in %s" % (single_eta, single_epsilon, end - start))
                 results.setdefault("data", []).append({})
-                current_result = results["data"][-1]
+                current_result = results["results"][-1]
                 current_result.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
                 current_result.setdefault("meta", {})["eta"] = single_eta
                 current_result.setdefault("meta", {})["epsilon"] = single_epsilon
