@@ -118,9 +118,9 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
         for cluster_idx, cluster in enumerate(clustering):
             results.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
             print("[cluster %s] %s" % (cluster_idx, len(cluster)))
+        print("[noise] %s" % len(clustering.noise))
         for noise in clustering.noise:
             results.setdefault("noise", []).append(noise.key)
-            print("[noise] %s" % len(noise))
         # for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
         for score in [silhouette_score]:
             try:
