@@ -56,19 +56,19 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
         configuration = ctx.obj.get("configurations", None)[0]
         signature = configuration.get("signatures", [None])[0]
         distance = configuration.get("distances", [None])[0]
-        # FIXME: I might also need cache statistics
+        statistics_cls = configuration.get("statistics", [None])[0]
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path(file_type="csv")  # expecting csv file
         tree_builder = CSVTreeBuilder()
 
         def header_to_cache(file_path):
             tree = tree_builder.build(file_path)
-            # FIXME: does this work as expected?
             tree_index = tree.to_index(
                 signature=signature,
                 start_support=distance.supported.get(ProcessStartEvent, False),
                 exit_support=distance.supported.get(ProcessExitEvent, False),
-                traffic_support=distance.supported.get(TrafficEvent, False)
+                traffic_support=distance.supported.get(TrafficEvent, False),
+                statistics_cls=statistics_cls
             )
             tree_index.key = file_path
             return tree_index
@@ -91,7 +91,7 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                 end = time.time()
                 cluster_distance = ClusterDistance(distance=distance)
                 clustering.graph.distance = cluster_distance
-                print("---> performed clustering with eta %s and epsilon %s in %s" % (eta, epsilon, end - start))
+                print("---> performed clustering with eta %s and epsilon %s in %s" % (single_eta, single_epsilon, end - start))
                 results.setdefault("data", []).append({})
                 current_result = results["data"][-1]
                 current_result.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
