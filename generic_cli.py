@@ -141,7 +141,8 @@ def intermediate_as_input(ctx, from_steps, to_steps, file_type):
             try:
                 os.symlink(file_path, structure.input_file_path(step=to_step, file_type=file_type))
             except OSError:
-                pass
+                os.unlink(file_path)
+                os.symlink(file_path, structure.input_file_path(step=to_step, file_type=file_type))
 
 
 @click.command()
