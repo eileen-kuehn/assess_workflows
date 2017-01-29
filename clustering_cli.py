@@ -46,8 +46,8 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
 
 
 @click.command()
-@click.option("--eta", "eta", type=int, default=5)
-@click.option("--epsilon", "epsilon", type=float, default=.1)
+@click.option("--eta", "eta", type=int, default=5, multiple=True)
+@click.option("--epsilon", "epsilon", type=float, default=.1, multiple=True)
 @click.pass_context
 def perform_precalculated_clustering(ctx, eta, epsilon):
     results = {}
@@ -56,14 +56,14 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
         configuration = ctx.obj.get("configurations", None)[0]
         signature = configuration.get("signatures", [None])[0]
         distance = configuration.get("distances", [None])[0]
-        # FIXME :I might also need cache statistics
+        # FIXME: I might also need cache statistics
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path(file_type="csv")  # expecting csv file
         tree_builder = CSVTreeBuilder()
 
         def header_to_cache(file_path):
             tree = tree_builder.build(file_path)
-            # FIXME: does it work as expected?
+            # FIXME: does this work as expected?
             tree_index = tree.to_index(
                 signature=signature,
                 start_support=distance.supported.get(ProcessStartEvent, False),
@@ -80,54 +80,37 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                 nodes_header=header_to_cache,
                 symmetric=True)
 
-        # adjacency_dict = {}
-        # with open(file_path, "r") as input_file:
-        #     input_data = json.load(input_file).get("data", None)
-        #     signature_cache = {}
-        #     for tree_idx, tree_path in enumerate(input_data["files"]):
-        #         tree = tree_builder.build(tree_path)
-        #         tree_index = tree.to_index(
-        #             signature=signature,
-        #             start_support=distance.supported.get(ProcessStartEvent, False),
-        #             exit_support=distance.supported.get(ProcessExitEvent, False),
-        #             traffic_support=distance.supported.get(TrafficEvent, False))
-        #         tree_index.key = tree_path
-        #         signature_cache[tree_idx] = tree_index
-        #     data = input_data["results"][0]["decorator"]["normalized_matrix"]
-        #     for row_idx, row in enumerate(data):
-        #         adjacency_dict[signature_cache[row_idx]] = {}
-        #         for col_idx, col in enumerate(row[0]):
-        #             if col_idx == row_idx:
-        #                 continue
-        #             adjacency_dict[signature_cache[row_idx]][signature_cache[col_idx]] = col
-        # perform the clustering
-
-        start = time.time()
-        clustering = DenGraphIO(
-            base_graph=graph,
-            cluster_distance=epsilon,
-            core_neighbours=eta)
-        end = time.time()
-        cluster_distance = ClusterDistance(distance=distance)
-        clustering.graph.distance = cluster_distance
-        print("---> performed clustering with eta %s and epsilon %s" % (eta, epsilon))
-        results.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
-        results.setdefault("meta", {})["eta"] = eta
-        results.setdefault("meta", {})["epsilon"] = epsilon
-        results["duration"] = end - start
-        for cluster_idx, cluster in enumerate(clustering):
-            results.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
-            print("[cluster %s] %s" % (cluster_idx, len(cluster)))
-        print("[noise] %s" % len(clustering.noise))
-        for noise in clustering.noise:
-            results.setdefault("noise", []).append(noise.key)
-        # for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
-        for score in [silhouette_score]:
-            try:
-                the_score = score(clustering.clusters, clustering.graph)
-            except ValueError:
-                the_score = None
-            results.setdefault("scores", {})[score.__name__] = the_score
+        for single_eta in eta:
+            for single_epsilon in epsilon:
+                start = time.time()
+                clustering = DenGraphIO(
+                    base_graph=graph,
+                    cluster_distance=single_epsilon,
+                    core_neighbours=single_eta
+                )
+                end = time.time()
+                cluster_distance = ClusterDistance(distance=distance)
+                clustering.graph.distance = cluster_distance
+                print("---> performed clustering with eta %s and epsilon %s in %s" % (eta, epsilon, end - start))
+                current_result = results.setdefault("data", []).append({})
+                current_result.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
+                current_result.setdefault("meta", {})["eta"] = eta
+                current_result.setdefault("meta", {})["epsilon"] = epsilon
+                current_result["duration"] = end - start
+                for cluster_idx, cluster in enumerate(clustering):
+                    current_result.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
+                    print("[cluster %s] %s" % (cluster_idx, len(cluster)))
+                print("[noise] %s" % len(clustering.noise))
+                for noise in clustering.noise:
+                    current_result.setdefault("noise", []).append(noise.key)
+                # for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
+                for score in [silhouette_score]:
+                    try:
+                        the_score = score(clustering.clusters, clustering.graph)
+                    except ValueError:
+                        the_score = None
+                    current_result.setdefault("scores", {})[score.__name__] = the_score
+                    print("Got a %s of %s" % (score.__name__, the_score))
 
     output_results(
         ctx=ctx,
