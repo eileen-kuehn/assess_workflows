@@ -95,8 +95,8 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                 results.setdefault("data", []).append({})
                 current_result = results["data"][-1]
                 current_result.setdefault("meta", {})["algorithm"] = clustering.__class__.__name__
-                current_result.setdefault("meta", {})["eta"] = eta
-                current_result.setdefault("meta", {})["epsilon"] = epsilon
+                current_result.setdefault("meta", {})["eta"] = single_eta
+                current_result.setdefault("meta", {})["epsilon"] = single_epsilon
                 current_result["duration"] = end - start
                 for cluster_idx, cluster in enumerate(clustering):
                     current_result.setdefault("clusters", []).append([node.key for node in cluster])  # TODO: determine CR
