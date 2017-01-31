@@ -972,6 +972,7 @@ def analyse_clustering_score(ctx):
 @click.command()
 @click.pass_context
 def analyse_tree_progress(ctx):
+    # FIXME: method currently does not produce the plots but only data
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()

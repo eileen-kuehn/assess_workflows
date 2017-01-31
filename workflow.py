@@ -444,7 +444,7 @@ def _perform_calculation(tree, algorithm, decorator_def, maxlen=float("Inf")):
     for event in tree.event_iter():
         try:
             algorithm.add_event(event)
-        except EventNotSupportedException:
+        except EventNotSupportedException as e:
             pass
     algorithm.finish_tree()
     return decorator
