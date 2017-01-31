@@ -6,6 +6,7 @@ import click
 import logging
 
 import assess_workflows
+from assess.exceptions.exceptions import EventNotSupportedException
 from assess_workflows.utils.utils import output_results, determine_version
 from dengraph.graphs import graph_io
 from utility.exceptions import ExceptionFrame
@@ -19,7 +20,7 @@ from dengraph.dengraph import DenGraphIO
 
 from assess.clustering.clustering import Clustering
 from assess.clustering.clusterdistance import ClusterDistance
-from assess.generators.gnm_importer import CSVTreeBuilder
+from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
 from assess.events.events import ProcessStartEvent, ProcessExitEvent, TrafficEvent
 
 from assess_workflows.generic.structure import Structure
@@ -54,32 +55,11 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
 
     if ctx.obj.get("use_input", False):
         configuration = ctx.obj.get("configurations", None)[0]
-        signature = configuration.get("signatures", [None])[0]
         distance = configuration.get("distances", [None])[0]
-        statistics_cls = configuration.get("statistics", [None])[0]
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path(file_type="csv")  # expecting csv file
-        tree_builder = CSVTreeBuilder()
 
-        def header_to_cache(file_path):
-            tree = tree_builder.build(file_path)
-            tree_index = tree.to_index(
-                signature=signature,
-                start_support=distance.supported.get(ProcessStartEvent, False),
-                exit_support=distance.supported.get(ProcessExitEvent, False),
-                traffic_support=distance.supported.get(TrafficEvent, False),
-                statistics_cls=statistics_cls
-            )
-            tree_index.key = file_path
-            return tree_index
-
-        with open(file_path) as csv_file:
-            # load the graph from precalculated csv distance values
-            graph = graph_io.csv_graph_reader(
-                (ln for ln in csv_file if ln[0] != '#' and ln != '\n'),
-                nodes_header=header_to_cache,
-                symmetric=True)
-
+        graph = _create_graph(ctx, file_path)
         for single_eta in eta:
             for single_epsilon in epsilon:
                 start = time.time()
@@ -172,8 +152,108 @@ def perform_clustering(ctx, eta, epsilon):
         source="%s (%s)" % (__file__, "perform_clustering")
     )
 
+
+@click.command()
+@click.option("--eta", "eta", type=int, default=5)
+@click.option("--epsilon", "epsilon", type=float, default=.1)
+@click.pass_context
+def perform_classification(ctx, eta, epsilon):
+    """
+    Method performs a classification. Before the actual classification can be tested, a clustering
+    is applied. Those clusters are following used for classification.
+
+    :param ctx:
+    :return:
+    """
+    if ctx.obj.get("use_input", False):
+        configuration = ctx.obj.get("configurations", None)[0]
+        distance = configuration.get("distances", [None])[0]
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path(file_type="csv")  # expecting csv file
+
+        graph = _create_graph(ctx, file_path)
+        clustering = DenGraphIO(
+            base_graph=graph,
+            cluster_distance=epsilon,
+            core_neighbours=eta
+        )
+        cluster_distance = ClusterDistance(distance=distance)
+        clustering.graph.distance = cluster_distance
+        # calculate CRs from clusters
+        prototype_caches = []
+        cluster_names = []
+        for cluster in clustering:
+            prototype_caches.append(cluster_distance.mean(list(cluster)))
+            cluster_names.append(cluster[0])
+
+        results = []
+        decorator_def = configuration.get("decorator", None)
+        for algorithm_def in configuration.get("algorithms", []):
+            for signature_def in configuration.get("signatures", []):
+                for event_streamer in configuration.get("event_streamer", [GNMCSVEventStreamer]):
+                    signature = signature_def()
+                    algorithm = algorithm_def(signature=signature)
+                    algorithm.cluster_representatitives(
+                        signature_prototypes=prototype_caches, prototypes=cluster_names)
+                    decorator = decorator_def()
+                    decorator.wrap_algorithm(algorithm=algorithm)
+                    # starting a new tree not to mix former results with current
+                    for node in clustering.graph:
+                        tree = event_streamer(csv_path=node.key)
+                        algorithm.start_tree()
+                        for event in tree.event_iter():
+                            try:
+                                algorithm.add_event(event)
+                            except EventNotSupportedException:
+                                pass
+                        algorithm.finish_tree()
+                    if decorator:
+                        results.append({
+                            "algorithm": "%s" % algorithm,
+                            "signature": "%s" % signature,
+                            "event_streamer": "%s" % tree if tree is not None
+                            else event_streamer(csv_path=None),
+                            "decorator": decorator.descriptive_data()
+                        })
+        output_results(
+            ctx=ctx,
+            results=results,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "perform_classification")
+        )
+
+
+def _create_graph(ctx, file_path):
+    configuration = ctx.obj.get("configurations", None)[0]
+    signature = configuration.get("signatures", [None])[0]
+    distance = configuration.get("distances", [None])[0]
+    statistics_cls = configuration.get("statistics", [None])[0]
+    tree_builder = CSVTreeBuilder()
+
+    def header_to_cache(tree_path):
+        tree = tree_builder.build(tree_path)
+        tree_index = tree.to_index(
+            signature=signature,
+            start_support=distance.supported.get(ProcessStartEvent, False),
+            exit_support=distance.supported.get(ProcessExitEvent, False),
+            traffic_support=distance.supported.get(TrafficEvent, False),
+            statistics_cls=statistics_cls
+        )
+        tree_index.key = tree_path
+        return tree_index
+
+    with open(file_path) as csv_file:
+        # load the graph from precalculated csv distance values
+        graph = graph_io.csv_graph_reader(
+            (ln for ln in csv_file if ln[0] != '#' and ln != '\n'),
+            nodes_header=header_to_cache,
+            symmetric=True
+        )
+        return graph
+
 cli.add_command(perform_clustering)
 cli.add_command(perform_precalculated_clustering)
+cli.add_command(perform_classification)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
