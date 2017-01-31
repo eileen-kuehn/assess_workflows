@@ -7,6 +7,8 @@ import click
 import rpy2
 import math
 
+from assess.events.events import TrafficEvent, ProcessStartEvent, ProcessExitEvent
+from assess.generators.gnm_importer import CSVTreeBuilder
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_error, \
     uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation, \
@@ -966,6 +968,67 @@ def analyse_clustering_score(ctx):
         )
 
 
+@click.command()
+@click.pass_context
+def analyse_tree_progress(ctx):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            tree_builder = CSVTreeBuilder()
+            results = {}
+            trees = []
+            events = []
+            traffics = []
+            structures = []
+            for sample in analysis_data.get("samples", []):
+                for tree_path in sample:
+                    tree = tree_builder.build(tree_path)
+                    for event_idx, event in enumerate(tree.event_iter()):
+                        if isinstance(event, TrafficEvent):
+                            try:
+                                results.setdefault(tree_path, {})["traffics"] += 1
+                            except KeyError:
+                                results.setdefault(tree_path, {})["traffics"] = 1
+                        elif (isinstance(event, ProcessStartEvent) or
+                                isinstance(event, ProcessExitEvent)):
+                            try:
+                                results.setdefault(tree_path, {})["structures"] += 1
+                            except KeyError:
+                                results.setdefault(tree_path, {})["structures"] = 1
+                        trees.append(tree_path)
+                        events.append(event_idx)
+                        traffics.append(results.setdefault(tree_path, {}).setdefault(
+                            "traffics", 0))
+                        structures.append(results.setdefault(tree_path, {}).setdefault(
+                            "structures", 0))
+
+            if ctx.obj.get("save", False):
+                from rpy2.robjects.packages import importr
+                import rpy2.robjects.lib.ggplot2 as ggplot2
+                from rpy2.robjects.lib.dplyr import DataFrame
+                from rpy2 import robjects
+
+                base = importr("base")
+                stats = importr("stats")
+                grdevices = importr("grDevices")
+                datatable = importr("data.table")
+                brewer = importr("RColorBrewer")
+
+                result_dt = datatable.data_table(tree=base.unlist(trees),
+                                                 event=base.unlist(events),
+                                                 traffics=base.unlist(traffics),
+                                                 structures=base.unlist(structures))
+
+                # save model for further adaptations
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, result_dt=result_dt
+                )
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -1074,6 +1137,7 @@ cli.add_command(analyse_diamond_level)
 cli.add_command(analyse_attribute_metric)
 cli.add_command(analyse_attribute_weight)
 cli.add_command(analyse_clustering_score)
+cli.add_command(analyse_tree_progress)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
