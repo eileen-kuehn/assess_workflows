@@ -233,7 +233,7 @@ def _create_graph(ctx, file_path):
     def header_to_cache(tree_path):
         tree = tree_builder.build(tree_path)
         tree_index = tree.to_index(
-            signature=signature,
+            signature=signature(),
             start_support=distance.supported.get(ProcessStartEvent, False),
             exit_support=distance.supported.get(ProcessExitEvent, False),
             traffic_support=distance.supported.get(TrafficEvent, False),
