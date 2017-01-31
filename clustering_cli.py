@@ -183,8 +183,8 @@ def perform_classification(ctx, eta, epsilon):
         prototype_caches = []
         cluster_names = []
         for cluster in clustering:
-            prototype_caches.append(cluster_distance.mean(list(cluster)))
-            cluster_names.append(cluster[0])
+            cluster_names.append(cluster[0].key)
+            prototype_caches.append(cluster_distance.mean(list(cluster)), prototype=cluster_names[-1])
 
         results = []
         decorator_def = configuration.get("decorator", None)
