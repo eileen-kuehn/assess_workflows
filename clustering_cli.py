@@ -167,7 +167,7 @@ def perform_classification(ctx, eta, epsilon):
     """
     if ctx.obj.get("use_input", False):
         configuration = ctx.obj.get("configurations", None)[0]
-        distance = configuration.get("distances", [None])[0]
+        distance_cls = configuration.get("distances", [None])[0]
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path(file_type="csv")  # expecting csv file
 
@@ -177,7 +177,7 @@ def perform_classification(ctx, eta, epsilon):
             cluster_distance=epsilon,
             core_neighbours=eta
         )
-        cluster_distance = ClusterDistance(distance=distance)
+        cluster_distance = ClusterDistance(distance=distance_cls())
         clustering.graph.distance = cluster_distance
         # calculate CRs from clusters
         prototype_caches = []
@@ -226,9 +226,10 @@ def perform_classification(ctx, eta, epsilon):
 def _create_graph(ctx, file_path):
     configuration = ctx.obj.get("configurations", None)[0]
     signature = configuration.get("signatures", [None])[0]
-    distance = configuration.get("distances", [None])[0]
+    distance_builder = configuration.get("distances", [None])[0]
     statistics_cls = configuration.get("statistics", [None])[0]
     tree_builder = CSVTreeBuilder()
+    distance = distance_builder()
 
     def header_to_cache(tree_path):
         tree = tree_builder.build(tree_path)
