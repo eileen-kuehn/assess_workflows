@@ -193,7 +193,7 @@ def perform_classification(ctx, eta, epsilon):
                 for event_streamer in configuration.get("event_streamer", [GNMCSVEventStreamer]):
                     signature = signature_def()
                     algorithm = algorithm_def(signature=signature)
-                    algorithm.cluster_representatitives(
+                    algorithm.cluster_representatives(
                         signature_prototypes=prototype_caches, prototypes=cluster_names)
                     decorator = decorator_def()
                     decorator.wrap_algorithm(algorithm=algorithm)
