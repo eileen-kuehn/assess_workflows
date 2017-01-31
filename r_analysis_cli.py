@@ -7,7 +7,8 @@ import click
 import rpy2
 import math
 
-from assess.events.events import TrafficEvent, ProcessStartEvent, ProcessExitEvent
+from assess.events.events import TrafficEvent, ProcessStartEvent, ProcessExitEvent, \
+    EmptyProcessEvent
 from assess.generators.gnm_importer import CSVTreeBuilder
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_error, \
@@ -995,6 +996,8 @@ def analyse_tree_progress(ctx):
                     base_tme = None
                     last_tme = None
                     for event_idx, event in enumerate(tree.event_iter()):
+                        if isinstance(event, EmptyProcessEvent):
+                            continue
                         if base_tme is None:
                             # perform initialisation
                             base_tme = event.tme
