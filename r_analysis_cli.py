@@ -978,15 +978,36 @@ def analyse_tree_progress(ctx):
         with open(file_path, "r") as input_file:
             analysis_data = json.load(input_file).get("data", None)
             tree_builder = CSVTreeBuilder()
-            results = {}
+            # remember values for event-wise development of tree
             trees = []
             events = []
             traffics = []
             structures = []
+            # remember values for timely development of tree
+            times = []
+            time_trees = []
+            time_traffics = []
+            time_structures = []
             for sample in analysis_data.get("samples", []):
                 for tree_path in sample:
                     tree = tree_builder.build(tree_path)
+                    results = {}
+                    base_tme = None
+                    last_tme = None
                     for event_idx, event in enumerate(tree.event_iter()):
+                        if base_tme is None:
+                            # perform initialisation
+                            base_tme = event.tme
+                            last_tme = event.tme
+                        if last_tme != event.tme:
+                            # remember current value
+                            times.append(last_tme - base_tme)
+                            time_trees.append(tree_path)
+                            time_traffics.append(results.setdefault(tree_path, {}).setdefault(
+                                "traffics", 0))
+                            time_structures.append(results.setdefault(tree_path, {}).setdefault(
+                                "structures", 0))
+                            last_tme = event.tme
                         if isinstance(event, TrafficEvent):
                             try:
                                 results.setdefault(tree_path, {})["traffics"] += 1
@@ -1021,11 +1042,16 @@ def analyse_tree_progress(ctx):
                                                  event=base.unlist(events),
                                                  traffics=base.unlist(traffics),
                                                  structures=base.unlist(structures))
+                time_result_dt = datatable.data_table(tree=base.unlist(time_trees),
+                                                      time=base.unlist(times),
+                                                      traffics=base.unlist(time_traffics),
+                                                      structures=base.unlist(time_structures))
 
                 # save model for further adaptations
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 output_r_data(
-                    ctx=ctx, filename=rdata_filename, result_dt=result_dt
+                    ctx=ctx, filename=rdata_filename, result_dt=result_dt,
+                    time_result_dt=time_result_dt
                 )
 
 
