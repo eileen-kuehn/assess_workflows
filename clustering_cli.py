@@ -183,10 +183,14 @@ def perform_classification(ctx, eta, epsilon):
         prototype_caches = []
         cluster_names = []
         for cluster in clustering:
-            cluster_names.append(cluster[0].key)
-            prototype_caches.append(cluster_distance.mean(list(cluster)), prototype=cluster_names[-1])
+            cluster_names.append(next(iter(cluster)).key)
+            prototype_caches.append(cluster_distance.mean(list(cluster), prototype=cluster_names[-1]))
 
-        results = []
+        results = {
+            "files": [],
+            "prototypes": cluster_names[:],
+            "results": []
+        }
         decorator_def = configuration.get("decorator", None)
         for algorithm_def in configuration.get("algorithms", []):
             for signature_def in configuration.get("signatures", []):
@@ -200,6 +204,7 @@ def perform_classification(ctx, eta, epsilon):
                     # starting a new tree not to mix former results with current
                     for node in clustering.graph:
                         tree = event_streamer(csv_path=node.key)
+                        results["files"].append(node.key)
                         algorithm.start_tree()
                         for event in tree.event_iter():
                             try:
@@ -208,7 +213,7 @@ def perform_classification(ctx, eta, epsilon):
                                 pass
                         algorithm.finish_tree()
                     if decorator:
-                        results.append({
+                        results["results"].append({
                             "algorithm": "%s" % algorithm,
                             "signature": "%s" % signature,
                             "event_streamer": "%s" % tree if tree is not None
