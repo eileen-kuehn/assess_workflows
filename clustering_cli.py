@@ -185,6 +185,10 @@ def perform_classification(ctx, eta, epsilon):
         for cluster in clustering:
             cluster_names.append(next(iter(cluster)).key)
             prototype_caches.append(cluster_distance.mean(list(cluster), prototype=cluster_names[-1]))
+        # combine caches
+        prototype_cache = prototype_caches[0]
+        for cache in prototype_caches[1:]:
+            prototype_cache += cache
 
         results = {
             "files": [],
@@ -198,7 +202,7 @@ def perform_classification(ctx, eta, epsilon):
                     signature = signature_def()
                     algorithm = algorithm_def(signature=signature)
                     algorithm.cluster_representatives(
-                        signature_prototypes=prototype_caches, prototypes=cluster_names)
+                        signature_prototypes=[prototype_cache], prototypes=cluster_names)
                     decorator = decorator_def()
                     decorator.wrap_algorithm(algorithm=algorithm)
                     # starting a new tree not to mix former results with current
