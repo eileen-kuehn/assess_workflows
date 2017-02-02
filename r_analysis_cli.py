@@ -1059,6 +1059,101 @@ def analyse_tree_progress(ctx):
                 )
 
 
+@click.command()
+@click.pass_context
+def analyse_anomalies(ctx):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        print("trying to open %s" % file_path)
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            tree = analysis_data.get("files", [])
+
+            for result_idx, result in enumerate(analysis_data.get("results", [])):
+                events = []
+                trees = []
+                cluster_counts = []
+                anomaly_decorator = result.get("decorator", {}).get("anomaly", [])
+                for anomaly_idx, anomaly in enumerate(anomaly_decorator):
+                    clusters = anomaly[0]
+                    # take first cluster as a reference for idx
+                    for event_index in xrange(len(clusters[0])):
+                        # determine first position of 0
+                        events.append(event_index)
+                        cluster_counts.append(len(clusters) - sum([cluster[event_index] for cluster in clusters]))
+                        trees.append(tree[anomaly_idx])
+        if ctx.obj.get("save", False):
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2.robjects.lib.dplyr import DataFrame
+            from rpy2 import robjects
+
+            base = importr("base")
+            stats = importr("stats")
+            grdevices = importr("grDevices")
+            datatable = importr("data.table")
+            brewer = importr("RColorBrewer")
+
+            result_dt = datatable.data_table(event=base.unlist(events),
+                                             tree=base.unlist(trees),
+                                             cluster_count=base.unlist(cluster_counts))
+            # save model for further adaptations
+            rdata_filename = structure.intermediate_file_path(file_type="RData")
+            output_r_data(
+                ctx=ctx, filename=rdata_filename, result_dt=result_dt
+            )
+
+
+@click.command()
+@click.pass_context
+def analyse_classification(ctx):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            tree = analysis_data.get("files", [])
+
+            events = []
+            trees = []
+            clusters = []
+            for result_idx, result in enumerate(analysis_data.get("results", [])):
+                distance_decorator = result.get("decorator", {}).get("normalized_distances", [])
+                for tree_idx, distances in enumerate(distance_decorator):
+                    current_clusters = distances[0]  # length 1
+                    # take first cluster as a reference for idx
+                    for event_index in xrange(len(current_clusters[0])):
+                        # determine first position of 0
+                        events.append(event_index)
+                        distance_values = [cluster[event_index] for cluster in current_clusters]
+                        clusters.append(distance_values.index(min(distance_values)))
+                        print("%s (%s)" % (distance_values, clusters[-1]))
+                        trees.append(tree[tree_idx])
+
+        if ctx.obj.get("save", False):
+            from rpy2.robjects.packages import importr
+            import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2.robjects.lib.dplyr import DataFrame
+            from rpy2 import robjects
+
+            base = importr("base")
+            stats = importr("stats")
+            grdevices = importr("grDevices")
+            datatable = importr("data.table")
+            brewer = importr("RColorBrewer")
+
+            result_dt = datatable.data_table(event=base.unlist(events),
+                                             tree=base.unlist(trees),
+                                             cluster=base.unlist(clusters))
+            # save model for further adaptations
+            rdata_filename = structure.intermediate_file_path(file_type="RData")
+            output_r_data(
+                ctx=ctx, filename=rdata_filename, result_dt=result_dt
+            )
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -1168,6 +1263,8 @@ cli.add_command(analyse_attribute_metric)
 cli.add_command(analyse_attribute_weight)
 cli.add_command(analyse_clustering_score)
 cli.add_command(analyse_tree_progress)
+cli.add_command(analyse_anomalies)
+cli.add_command(analyse_classification)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)

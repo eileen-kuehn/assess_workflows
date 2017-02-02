@@ -177,7 +177,7 @@ def perform_classification(ctx, eta, epsilon):
             cluster_distance=epsilon,
             core_neighbours=eta
         )
-        cluster_distance = ClusterDistance(distance=distance_cls())
+        cluster_distance = ClusterDistance(distance=distance_cls(), threshold=.1)
         clustering.graph.distance = cluster_distance
         # calculate CRs from clusters
         prototype_caches = []
