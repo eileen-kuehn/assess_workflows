@@ -1098,11 +1098,47 @@ def analyse_anomalies(ctx):
             result_dt = datatable.data_table(event=base.unlist(events),
                                              tree=base.unlist(trees),
                                              cluster_count=base.unlist(cluster_counts))
+
+            robjects.r("""
+            normalise_trees <- function(dt) {
+                require(data.table)
+                tmp <- dt[,.(max_event=max(event), diff=shift(cluster_count) - cluster_count, cluster_count, event=event), by=tree]
+                tmp <- tmp[,.(normalised=event/max_event, cluster_count=cluster_count, diff=diff), by=list(tree, event)]
+                tmp$progress <- round(tmp$normalised, digits=2)
+                tmp[,.(cluster_count=mean(cluster_count), diff), by=list(tree, progress)]
+            }
+            """)
+            normalise_trees = robjects.r["normalise_trees"]
+            tmp_dt = normalise_trees(result_dt)
+
+            # create the plots
+            anomaly_plot = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="progress", y="cluster_count", colour="tree") + \
+                ggplot2.geom_line(show_legend=robjects.BoolVector([False]))
+            anomaly_filename = os.path.join(structure.exploratory_path(), "anomaly.png")
+
+            anomaly_diff_plot = ggplot2.ggplot(tmp_dt) + ggplot2.aes_string(x="progress", y="diff") + \
+                ggplot2.stat_bin2d()
+            anomaly_diff_filename = os.path.join(structure.exploratory_path(), "anomaly_diff.png")
+            _do_the_plotting([(anomaly_plot, anomaly_filename,),
+                              (anomaly_diff_plot, anomaly_diff_filename,)])
+
             # save model for further adaptations
             rdata_filename = structure.intermediate_file_path(file_type="RData")
             output_r_data(
-                ctx=ctx, filename=rdata_filename, result_dt=result_dt
+                ctx=ctx, filename=rdata_filename, result_dt=result_dt, anomaly_plot=anomaly_plot,
+                anomaly_filename=anomaly_filename, anomaly_diff_plot=anomaly_diff_plot,
+                anomaly_diff_filename=anomaly_diff_filename, tmp_dt=tmp_dt
             )
+
+
+def _do_the_plotting(plot_list):
+    from rpy2.robjects.packages import importr
+    grdevices = importr("grDevices")
+    # perform the plotting
+    for plot, filename in plot_list:
+        grdevices.png(filename)
+        plot.plot()
+        grdevices.dev_off()
 
 
 @click.command()
