@@ -232,6 +232,55 @@ def perform_classification(ctx, eta, epsilon):
         )
 
 
+@click.command()
+@click.option("--eta", "eta", type=int, default=5)
+@click.option("--epsilon", "epsilon", type=float, default=.1)
+@click.option("--threshold", "threshold", type=float, default=.1)
+@click.pass_context
+def validate_representatives(ctx, eta, epsilon, threshold):
+    """
+    Method performs a clustering and from this resulting clusters, calculates the cluster
+    representatives to measure our current current representation. For validation of the cluster
+    representatives we evaluate the distance of each clustered object to the calculated cluster
+    representative. Whenever the distance is bigger than the given epsilon for clustering, we
+    have a bad representation.
+
+    :param ctx:
+    :return:
+    """
+    if ctx.obj.get("use_input", False):
+        configuration = ctx.obj.get("configurations", None)[0]
+        distance_cls = configuration.get("distances", [None])[0]
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path(file_type="csv")  # expecting csv file
+
+        graph = _create_graph(ctx, file_path)
+        clustering = DenGraphIO(
+            base_graph=graph,
+            cluster_distance=epsilon,
+            core_neighbours=eta
+        )
+        cluster_distance = ClusterDistance(distance=distance_cls(), threshold=threshold)
+        clustering.graph.distance = cluster_distance
+
+        results = {"meta": {"eta": eta, "epsilon": epsilon, "threshold": threshold}, "clusters": {}}
+        # calculate CRs from clusters
+        for cluster_index, cluster in enumerate(clustering):
+            cluster_representative = cluster_distance.mean(list(cluster))
+            for tree_object in cluster:
+                # calculate distance to cluster representative
+                distance = cluster_distance(cluster_representative, tree_object)
+                results["clusters"].setdefault(cluster_index, {}).setdefault("tree", []).append(tree_object.key)
+                results["clusters"].setdefault(cluster_index, {}).setdefault("distance", []).append(distance)
+
+        output_results(
+            ctx=ctx,
+            results=results,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "validate_representatives")
+        )
+
+
 def _create_graph(ctx, file_path):
     configuration = ctx.obj.get("configurations", None)[0]
     signature = configuration.get("signatures", [None])[0]
@@ -264,6 +313,7 @@ def _create_graph(ctx, file_path):
 cli.add_command(perform_clustering)
 cli.add_command(perform_precalculated_clustering)
 cli.add_command(perform_classification)
+cli.add_command(validate_representatives)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
