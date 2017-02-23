@@ -85,10 +85,10 @@ def _prepare_raw_data(kwargs):
         output_path = kwargs.get("output_path", None)
         data_source = DataSource.best_available_data_source()
         for job in data_source.jobs(
-                source="raw", path=path, data_path=output_path, stateful=True):
+                source="raw", path=path, data_path=output_path, stateful=False):
             data_source.write_job(data=job, path=output_path)
         for traffic in data_source.traffics(
-                source="raw", path=path, data_path=output_path, stateful=True):
+                source="raw", path=path, data_path=output_path, stateful=False):
             data_source.write_traffic(data=traffic, path=output_path)
 
 
