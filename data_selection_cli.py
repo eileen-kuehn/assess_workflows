@@ -24,16 +24,27 @@ from assess_workflows.utils.utils import output_results, determine_version, do_m
 @click.group()
 @click.option("--basepath", "basepath", multiple=False, required=True)
 @click.option("--workflow-name", "workflow_name", multiple=False, required=True)
+@click.option("--prototype-cache-preloaded-only", "prototype_cache_preloaded_only", default=False)
 @click.option("--step", "step", default=1, multiple=False)
 @click.option("--save", "save", is_flag=True)
 @click.option("--use_input", "use_input", is_flag=True,
               help="Use input file specified for current task.")
 @click.pass_context
-def cli(ctx, basepath, workflow_name, step, save, use_input):
+def cli(ctx, basepath, workflow_name, step, save, use_input, prototype_cache_preloaded_only):
     ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
     ctx.obj["json"] = True
     ctx.obj["save"] = save
     ctx.obj["use_input"] = use_input
+    ctx.obj["prototype_cache_preloaded_only"] = prototype_cache_preloaded_only
+
+def _relevant_files_for_context(ctx, path):
+    filenames = []
+    if ctx.obj.get("prototype_cache_preloaded_only", False):
+        filenames.extend([found_file.replace("_prototypes.pkl", ".csv") for found_file in
+                          glob.glob("%s/*/*-process_prototypes.pkl" % path)])
+    else:
+        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+    return filenames
 
 
 @click.command()
@@ -52,7 +63,7 @@ def index_valid_trees(ctx, paths, pcount):
     results = []
     filenames = []
     for path in paths:
-        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+        filenames.extend(_relevant_files_for_context(ctx, path))
     if pcount > 1:
         results.extend(do_multicore(
             count=pcount,
@@ -80,7 +91,7 @@ def index_data_by_tme(ctx, paths, pcount):
     results = MulticoreResult()
     filenames = []
     for path in paths:
-        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+        filenames.extend(_relevant_files_for_context(ctx, path))
     if pcount > 1:
         result_list = do_multicore(
             count=pcount,
@@ -108,7 +119,7 @@ def index_data_by_uid(ctx, paths, pcount):
     results = MulticoreResult()
     filenames = []
     for path in paths:
-        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+        filenames.extend(_relevant_files_for_context(ctx, path))
     if pcount > 1:
         result_list = do_multicore(
             count=pcount,
@@ -139,11 +150,13 @@ def index_data_by_number_of_nodes(ctx, paths):
         with open(file_path, "r") as input_file:
             paths = list(paths)
             paths.extend(json.load(input_file)["data"])
+    filenames = []
     for path in paths:
+        filenames.extend(_relevant_files_for_context(ctx, path))
+    for filename in filenames:
         if not os.path.isfile(path):
-            for filename in glob.glob("%s/*/*-process.csv" % path):
-                count = _line_count(filename)
-                results.setdefault(count, []).append(filename)
+            count = _line_count(filename)
+            results.setdefault(count, []).append(filename)
         else:
             count = _line_count(path)
             results.setdefault(count, []).append(path)
@@ -178,16 +191,18 @@ def index_data_by_number_of_traffic_events(ctx, paths):
 @click.pass_context
 def index_data_by_number_of_events(ctx, paths):
     results = {}
+    filenames = []
     for path in paths:
-        for filename in glob.glob("%s/*/*-process.csv" % path):
-            basename = os.path.basename(filename)
-            db_id = basename.split("-")[0]
-            # access process file
-            count = _line_count(filename=filename) * 2  # start and finishing of a process
-            # access traffic file (if existent)
-            traffic_count = _line_count(
-                filename=os.path.join(os.path.dirname(filename), "%s-traffic.csv" % db_id))
-            results.setdefault(count + traffic_count, []).append(filename)
+        filenames.extend(_relevant_files_for_context(ctx, path))
+    for filename in filenames:
+        basename = os.path.basename(filename)
+        db_id = basename.split("-")[0]
+        # access process file
+        count = _line_count(filename=filename) * 2  # start and finishing of a process
+        # access traffic file (if existent)
+        traffic_count = _line_count(
+            filename=os.path.join(os.path.dirname(filename), "%s-traffic.csv" % db_id))
+        results.setdefault(count + traffic_count, []).append(filename)
 
     output_results(
         ctx=ctx,
@@ -236,7 +251,7 @@ def index_process_names(ctx, paths, pcount):
     filenames = []
     result_set = set()
     for path in paths:
-        filenames.extend(glob.glob("%s/*/*-process.csv" % path))
+        filenames.extend(_relevant_files_for_context(ctx, path))
     if pcount > 1:
         result_list = do_multicore(
             count=pcount,
@@ -265,7 +280,7 @@ def index_tree_statistics(ctx, paths, pcount):
     filenames = []
     results = MulticoreResult()
     for path in paths:
-        filenames.extend(glob.glob(("%s/*/*-process.csv" % path)))
+        filenames.extend(_relevant_files_for_context(ctx, path))
     if pcount > 1:
         result_list = do_multicore(
             count=pcount,
