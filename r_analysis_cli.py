@@ -41,6 +41,16 @@ def cli(ctx, basepath, workflow_name, step, configuration, save, use_input):
 @click.command()
 @click.pass_context
 def analyse_compression(ctx):
+    """
+    Method generates the following plots:
+
+    * signature count over node count
+    * compression rage over node count
+    * TODO: alphabet size over node count
+
+    :param ctx:
+    :return:
+    """
     structure = ctx.obj.get("structure")
 
     if ctx.obj.get("use_input", False):
@@ -103,6 +113,13 @@ def analyse_compression(ctx):
                                             relative_compression_mean="mean(signature_count/node_count)",
                                             compression_stderror="sd(signature_count)/sqrt(length(signature_count))",
                                             relative_compression_stderror="sd(signature_count/node_count)/sqrt(length(signature_count))"))
+            alphabet_values = (DataFrame(result_dt)
+                               .select("tree", "node_count", "alphabet_count")
+                               .group_by("tree", "node_count")
+                               .summarize(alphabet_count="mean(alphabet_count)")
+                               .group_by("node_count")
+                               .summarize(alphabet_mean="mean(alphabet_count)",
+                                          alphabet_stderror="sd(alphabet_count)/sqrt(length(alphabet_count))"))
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
                 x="node_count", y="compression_mean", color="signature") + \
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
@@ -113,10 +130,16 @@ def analyse_compression(ctx):
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
                 ymin="relative_compression_mean-relative_compression_stderror",
                 ymax="relative_compression_mean+relative_compression_stderror")
+            alphabet_plot = ggplot2.ggplot(alphabet_values) + ggplot2.aes_string(
+                x="node_count", y="alphabet_mean") + ggplot2.geom_point() + ggplot2.geom_errorbar() \
+                + ggplot2.aes_string(ymin="alphabet_mean-alphabet_stderror",
+                                     ymax="alphabet_mean+alphabet_stderror", width=.01)
             absolute_filename = os.path.join(structure.exploratory_path(), "absolute_compression.png")
             relative_filename = os.path.join(structure.exploratory_path(), "relative_compression.png")
+            alphabet_filename = os.path.join(structure.exploratory_path(), "alphabet.png")
             for file_name, plot in {absolute_filename: absolute_plot,
-                                    relative_filename: relative_plot}.items():
+                                    relative_filename: relative_plot,
+                                    alphabet_filename: alphabet_plot}.items():
                 grdevices.png(file_name)
                 plot.plot()
                 grdevices.dev_off()
@@ -128,7 +151,8 @@ def analyse_compression(ctx):
                     ctx=ctx, filename=rdata_filename, absolute_plot=absolute_plot,
                     relative_plot=relative_plot, absolute_filename=absolute_filename,
                     relative_filename=relative_filename, summarized_values=summarized_values,
-                    result_dt=result_dt
+                    alphabet_values=alphabet_values, alphabet_plot=alphabet_plot,
+                    alphabet_filename=alphabet_filename, result_dt=result_dt
                 )
 
 
