@@ -151,12 +151,16 @@ def analyse_compression(ctx, pcount):
 
         with open(file_path, "r") as input_file:
             analysis_files = json.load(input_file).get("data", None)
+            data = []
+            for node_count, tree_paths in analysis_files.items():
+                for tree_path in tree_paths:
+                    for path in tree_path:
+                        data.append({
+                            "node_count": node_count,
+                            "filepath": path,
+                            "signature_builders": signature_builders
+                        })
             if pcount > 1:
-                data = [{
-                    "node_count": node_count,
-                    "filepath": tree_path[0],
-                    "signature_builders": signature_builders} for node_count, tree_paths in
-                        analysis_files.items() for tree_path in tree_paths]
                 multicore_results = do_multicore(
                     count=pcount,
                     target=_analyse_compression,
@@ -165,13 +169,8 @@ def analyse_compression(ctx, pcount):
                 for result in multicore_results:
                     results += result
             else:
-                for node_count, tree_paths in analysis_files.items():
-                    for tree_path in tree_paths:
-                        results += _analyse_compression({
-                            "node_count": node_count,
-                            "filepath": tree_path[0],
-                            "signature_builders": signature_builders
-                        })
+                for elem in data:
+                    results += _analyse_compression(elem)
 
     output_results(
         ctx=ctx,
