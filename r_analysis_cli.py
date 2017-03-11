@@ -83,7 +83,6 @@ def analyse_compression(ctx):
                         fanout_max_list.append(fanout_max[index])
                         fanout_mean_list.append(fanout_mean[index])
                         fanout_std_list.append(fanout_std[index])
-            print(node_count_list)
 
             # convert lists to datatable
             result_dt = datatable.data_table(
