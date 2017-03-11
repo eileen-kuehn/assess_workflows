@@ -2,6 +2,25 @@ from __future__ import division
 import math
 
 
+def standard_deviation(values):
+    """
+    corrected standard variation for samples
+
+    :param values:
+    :return:
+    """
+    return math.sqrt(sum(_distances_to_mean(values)) / (len(values) - 1))
+
+
+def population_standard_deviation(values):
+    return math.sqrt(sum(_distances_to_mean(values)) / len(values))
+
+
+def _distances_to_mean(values):
+    mean = sum(values)/len(values)
+    return [(value - mean)**2 for value in values]
+
+
 def absolute_error(values):
     mean = sum(values)/len(values)
     try:

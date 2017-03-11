@@ -9,7 +9,8 @@ import logging
 import assess_workflows
 from assess.exceptions.exceptions import TreeInvalidatedException
 from assess_workflows.utils.multicoreresult import MulticoreResult
-from assess_workflows.utils.statistics import uncorrelated_relative_deviation_and_standard_error
+from assess_workflows.utils.statistics import uncorrelated_relative_deviation_and_standard_error, \
+    standard_deviation
 from gnmutils.exceptions import DataNotInCacheException
 
 from utility.exceptions import ExceptionFrame
@@ -42,6 +43,30 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
 
 
 def _analyse_compression(kwargs):
+    """
+    Generates the following structure:
+
+    <number of nodes>: {
+        "file": [<string>, ...],
+        "alphabet_count": [<int>, ...],
+        "tree_height": [<int>, ...],
+        "identity_count": {
+            <Signature>: [<int>, ...]
+        },
+        "fanout": {
+            "min": [<int>, ...],
+            "max": [<int>, ...],
+            "mean": [<float>, ...],
+            "std": [<float>, ...]
+        }
+    }
+
+    :param filepath: Path for tree to consider
+    :param node_count: Number of nodes within tree
+    :param signature_builders: Signature builders to consider for generation of identities
+    :param kwargs:
+    :return:
+    """
     filepath = kwargs.get("filepath", None)
     node_count = kwargs.get("node_count", None)
     signature_builders = kwargs.get("signature_builders", None)
@@ -53,6 +78,13 @@ def _analyse_compression(kwargs):
         pass
     else:
         if tree is not None:
+            alphabet = set()
+            fanout = []
+            # prepare generic data first
+            for node in tree.node_iter():
+                if len(node.children_list()) > 0:
+                    fanout.append(len(node.children_list()))
+                alphabet.add(node.name)
             for signature_builder in signature_builders:
                 signature = signature_builder()
                 compression = [set() for _ in range(signature.count)]
@@ -61,10 +93,19 @@ def _analyse_compression(kwargs):
                     for index, identity in enumerate(identities):
                         compression[index].add(identity)
                 # write results
-                # {node_count: {signature_1: value, signature_2: value}}
-                current = result.setdefault(node_count, {})
+                # {node_count: "identity_count": {signature_1: [value, ...], signature_2: [value, ...]}}
+                current = result.setdefault(node_count, {}).setdefault("identity_count", {})
                 for index, single_signature in enumerate(signature._signatures):
                     current.setdefault(repr(single_signature), []).append(len(compression[index]))
+            result.setdefault(node_count, {}).setdefault("file", []).append(filepath)
+            result.setdefault(node_count, {}).setdefault("alphabet_count", []).append(len(alphabet))
+            current_fanout = result.setdefault(node_count, {}).setdefault("fanout", {})
+            current_fanout.setdefault("min", []).append(min(fanout))
+            current_fanout.setdefault("max", []).append(max(fanout))
+            current_fanout.setdefault("mean", []).append(sum(fanout)/float(len(fanout)))
+            current_fanout.setdefault("std", []).append(standard_deviation(fanout))
+            # TODO: not supported by tree yet
+            # result.setdefault(node_count, {}).setdefault("tree_height", []).append(tree.depth)
     return result
 
 
@@ -72,6 +113,35 @@ def _analyse_compression(kwargs):
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
 def analyse_compression(ctx, pcount):
+    """
+    Method prepares data for further compression analysis. Thus, it collects information on
+    * number of nodes in original tree
+    * height of tree as an optional information
+    * size of the alphabet (optimised by excluding id numbers in names)
+    * number of unique identities generated
+    * statistics on the trees fanout
+
+    The following output format can be expected
+
+    <number of nodes>: {
+        "file": [<string>, ...],
+        "alphabet_count": [<int>, ...],
+        "tree_height": [<int>, ...],
+        "identity_count": {
+            <Signature>: [<int>, ...]
+        },
+        "fanout": {
+            "min": [<int>, ...],
+            "max": [<int>, ...],
+            "mean": [<float>, ...],
+            "std": [<float>, ...]
+        }
+    }
+
+    :param ctx:
+    :param pcount:
+    :return:
+    """
     results = MulticoreResult()
     ctx.obj["json"] = True
     if ctx.obj.get("use_input", False):

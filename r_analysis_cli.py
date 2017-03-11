@@ -55,25 +55,55 @@ def analyse_compression(ctx):
             base = importr("base")
 
             input_data = json.load(input_file).get("data", None)
-            result_dt = None
-            for node_count, signature_values in input_data.items():
-                for signature, compression_values in signature_values.items():
-                    current_dt = datatable.data_table(
-                        signature=signature,
-                        node_count=base.as_integer(node_count),
-                        compression=base.unlist(compression_values)
-                    )
-                    if result_dt is None:
-                        result_dt = current_dt
-                    else:
-                        result_dt = datatable.rbindlist([result_dt, current_dt])
+            file_list = []
+            node_count_list = []
+            signature_list = []
+            identity_count_list = []
+            alphabet_count_list = []
+            fanout_min_list = []
+            fanout_max_list = []
+            fanout_mean_list = []
+            fanout_std_list = []
+            for node_count, result_data in input_data.items():
+                alphabet_count = result_data.get("alphabet_count", 0)
+                fanout_data = result_data.get("fanout", {})
+                identity_count = result_data.get("identity_count", {})
+                fanout_min = fanout_data.get("min", [])
+                fanout_max = fanout_data.get("max", [])
+                fanout_mean = fanout_data.get("mean", [])
+                fanout_std = fanout_data.get("std", [])
+                for index, filepath in enumerate(result_data.get("file", [])):
+                    for identity_key, identities in identity_count.items():
+                        identity_count_list.append(identities[index])
+                        signature_list.append(identity_key)
+                        file_list.append(filepath)
+                        node_count_list.append(int(node_count))
+                        alphabet_count_list.append(alphabet_count[index])
+                        fanout_min_list.append(fanout_min[index])
+                        fanout_max_list.append(fanout_max[index])
+                        fanout_mean_list.append(fanout_mean[index])
+                        fanout_std_list.append(fanout_std[index])
+            print(node_count_list)
+
+            # convert lists to datatable
+            result_dt = datatable.data_table(
+                tree=base.unlist(file_list),
+                node_count=base.unlist(node_count_list),
+                signature=base.unlist(signature_list),
+                signature_count=base.unlist(identity_count_list),
+                alphabet_count=base.unlist(alphabet_count_list),
+                fanout_min=base.unlist(fanout_min_list),
+                fanout_max=base.unlist(fanout_max_list),
+                fanout_mean=base.unlist(fanout_mean_list),
+                fanout_std=base.unlist(fanout_std_list)
+            )
             # summarize data table
             summarized_values = (DataFrame(result_dt)
                                  .group_by("signature", "node_count")
-                                 .summarize(compression_mean="mean(compression)",
-                                            relative_compression_mean="mean(compression/node_count)",
-                                            compression_stderror="sd(compression)/sqrt(length(compression))",
-                                            relative_compression_stderror="sd(compression/node_count)/sqrt(length(compression))"))
+                                 .summarize(compression_mean="mean(signature_count)",
+                                            relative_compression_mean="mean(signature_count/node_count)",
+                                            compression_stderror="sd(signature_count)/sqrt(length(signature_count))",
+                                            relative_compression_stderror="sd(signature_count/node_count)/sqrt(length(signature_count))"))
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
                 x="node_count", y="compression_mean", color="signature") + \
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
