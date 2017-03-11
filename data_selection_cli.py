@@ -37,6 +37,7 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, prototype_cache_pre
     ctx.obj["use_input"] = use_input
     ctx.obj["prototype_cache_preloaded_only"] = prototype_cache_preloaded_only
 
+
 def _relevant_files_for_context(ctx, path):
     filenames = []
     if ctx.obj.get("prototype_cache_preloaded_only", False):
