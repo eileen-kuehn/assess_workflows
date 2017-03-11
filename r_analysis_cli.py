@@ -110,9 +110,9 @@ def analyse_compression(ctx):
             summarized_values = (DataFrame(result_dt)
                                  .group_by("signature", "node_count")
                                  .summarize(compression_mean="mean(signature_count)",
-                                            relative_compression_mean="mean(signature_count/node_count)",
+                                            relative_compression_mean="mean(1-(signature_count/node_count))",
                                             compression_stderror="sd(signature_count)/sqrt(length(signature_count))",
-                                            relative_compression_stderror="sd(signature_count/node_count)/sqrt(length(signature_count))"))
+                                            relative_compression_stderror="sd(1-(signature_count/node_count))/sqrt(length(signature_count))"))
             alphabet_values = (DataFrame(result_dt)
                                .select("tree", "node_count", "alphabet_count")
                                .group_by("tree", "node_count")
