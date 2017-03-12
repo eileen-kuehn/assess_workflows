@@ -69,6 +69,7 @@ def analyse_compression(ctx):
             input_data = json.load(input_file).get("data", None)
             file_list = []
             node_count_list = []
+            real_node_count_list = []
             signature_list = []
             identity_count_list = []
             alphabet_count_list = []
@@ -80,7 +81,9 @@ def analyse_compression(ctx):
             file_single_list = []
             fanout_single_list = []
             node_count_single_list = []
+            real_node_count_single_list = []
             for node_count, result_data in input_data.items():
+                real_node_count = result_data.get("node_count", [])
                 alphabet_count = result_data.get("alphabet_count", 0)
                 fanout_data = result_data.get("fanout", {})
                 identity_count = result_data.get("identity_count", {})
@@ -93,11 +96,13 @@ def analyse_compression(ctx):
                     fanout_single_list.extend(fanout_full[index])
                     file_single_list.extend([filepath for _ in range(len(fanout_full[index]))])
                     node_count_single_list.extend([int(node_count) for _ in range(len(fanout_full[index]))])
+                    real_node_count_single_list.extend([int(real_node_count[index]) for _ in range(len(fanout_full[index]))])
                     for identity_key, identities in identity_count.items():
                         identity_count_list.append(identities[index])
                         signature_list.append(identity_key)
                         file_list.append(filepath)
                         node_count_list.append(int(node_count))
+                        real_node_count_list.append(int(real_node_count[index]))
                         alphabet_count_list.append(alphabet_count[index])
                         fanout_min_list.append(fanout_min[index])
                         fanout_max_list.append(fanout_max[index])
@@ -107,12 +112,14 @@ def analyse_compression(ctx):
             fanout_dt = datatable.data_table(
                 tree=base.unlist(file_single_list),
                 node_count=base.unlist(node_count_single_list),
+                real_node_count=base.unlist(real_node_count_single_list),
                 fanout=base.unlist(fanout_single_list)
             )
             # convert lists to datatable
             result_dt = datatable.data_table(
                 tree=base.unlist(file_list),
                 node_count=base.unlist(node_count_list),
+                real_node_count=base.unlist(real_node_count_list),
                 signature=base.unlist(signature_list),
                 signature_count=base.unlist(identity_count_list),
                 alphabet_count=base.unlist(alphabet_count_list),
@@ -129,24 +136,24 @@ def analyse_compression(ctx):
                                             compression_stderror="sd(signature_count)/sqrt(length(signature_count))",
                                             relative_compression_stderror="sd(1-(signature_count/node_count))/sqrt(length(signature_count))"))
             alphabet_values = (DataFrame(result_dt)
-                               .select("tree", "node_count", "alphabet_count")
-                               .group_by("tree", "node_count")
+                               .select("tree", "real_node_count", "node_count", "alphabet_count")
+                               .group_by("tree", "real_node_count", "node_count")
                                .summarize(alphabet_count="mean(alphabet_count)"))
-            robjects.r("""
-            alphabet_count <- function(data) {
-                require(data.table)
-                data <- data.table(data)
-                result <- data[,.N, by=list(alphabet_count, node_count)]
-                setkey(result, node_count, alphabet_count)
-                max_alphabet_count = max(result$alphabet_count)
-                node_counts <- unique(result$node_count)
-                tmp <- data.table(alphabet_count=rep.int(1:max_alphabet_count, length(node_counts)), node_count=rep(node_counts, each=max_alphabet_count))
-                setkey(tmp, node_count, alphabet_count)
-                result[tmp]
-            }
-            """)
-            alphabet_count = robjects.r["alphabet_count"]
-            alphabet_tmp_dt = alphabet_count(alphabet_values)
+            # robjects.r("""
+            # alphabet_count <- function(data, node_count_name) {
+            #     require(data.table)
+            #     data <- data.table(data)
+            #     result <- data[,.N, by=list(alphabet_count, "node_count"=get(node_count_name))]
+            #     setkey(result, node_count, alphabet_count)
+            #     max_alphabet_count = max(result$alphabet_count)
+            #     node_counts <- unique(result$node_count)
+            #     tmp <- data.table(alphabet_count=rep.int(1:max_alphabet_count, length(node_counts)), node_count=rep(node_counts, each=max_alphabet_count))
+            #     setkey(tmp, node_count, alphabet_count)
+            #     result[tmp]
+            # }
+            # """)
+            # alphabet_count = robjects.r["alphabet_count"]
+            # alphabet_tmp_dt = alphabet_count(alphabet_values, "real_node_count")
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
                 x="node_count", y="compression_mean", color="signature") + \
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
@@ -157,32 +164,34 @@ def analyse_compression(ctx):
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
                 ymin="relative_compression_mean-relative_compression_stderror",
                 ymax="relative_compression_mean+relative_compression_stderror")
-            alphabet_plot = ggplot2.ggplot(alphabet_tmp_dt) + ggplot2.aes_string(
-                x="node_count", y="alphabet_count", fill="N") + ggplot2.geom_tile(
-                color="white", size=.1) + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
-                    n=9, name="Reds"), na_value="white", name="Count")
+            # alphabet_plot = ggplot2.ggplot(alphabet_tmp_dt) + ggplot2.aes_string(
+            #     x="node_count", y="alphabet_count", fill="N") + ggplot2.geom_tile(
+            #     color="white", size=.1) + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
+            #         n=9, name="Reds"), na_value="white", name="Count")
             alphabet_plot = ggplot2.ggplot(alphabet_values) + ggplot2.aes_string(
-                x="as.factor(node_count)", y="alphabet_count") + ggplot2.stat_bin_2d()
+                x="real_node_count", y="alphabet_count") + ggplot2.stat_bin_2d() + \
+                ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(n=9, name="Reds"),
+                                             na_value="white", name="Count")
 
-            robjects.r("""
-            fanout_count <- function(data) {
-                require(data.table)
-                result <- data[,.(N=.N, ratio=.N/node_count),by=list(tree,fanout,node_count)]
-                setkey(result, node_count, fanout)
-                max_fanout <- max(result$fanout)
-                node_counts <- unique(result$node_count)
-                tmp <- data.table(fanout=rep.int(1:max_fanout, length(node_counts)), node_count=rep(node_counts, each=max_fanout))
-                setkey(tmp, node_count, fanout)
-                result[tmp]
-            }
-            """)
-            fanout_count = robjects.r["fanout_count"]
-            fanout_tmp_dt = fanout_count(fanout_dt)
-            fanout_plot = ggplot2.ggplot(fanout_tmp_dt) + ggplot2.aes_string(
-                x="node_count", y="fanout", fill="ratio") + ggplot2.geom_tile(color="white", size=.1) \
-                + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
-                    n=9, name="Greens"), na_value="white", name="Fraction")
-            fanout_plot = ggplot2.ggplot(fanout_dt) + ggplot2.aes_string(x="as.factor(node_count)", y="fanout") + \
+            # robjects.r("""
+            # fanout_count <- function(data) {
+            #     require(data.table)
+            #     result <- data[,.(N=.N, ratio=.N/node_count),by=list(tree,fanout,node_count)]
+            #     setkey(result, node_count, fanout)
+            #     max_fanout <- max(result$fanout)
+            #     node_counts <- unique(result$node_count)
+            #     tmp <- data.table(fanout=rep.int(1:max_fanout, length(node_counts)), node_count=rep(node_counts, each=max_fanout))
+            #     setkey(tmp, node_count, fanout)
+            #     result[tmp]
+            # }
+            # """)
+            # fanout_count = robjects.r["fanout_count"]
+            # fanout_tmp_dt = fanout_count(fanout_dt)
+            # fanout_plot = ggplot2.ggplot(fanout_tmp_dt) + ggplot2.aes_string(
+            #     x="node_count", y="fanout", fill="ratio") + ggplot2.geom_tile(color="white", size=.1) \
+            #     + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
+            #         n=9, name="Greens"), na_value="white", name="Fraction")
+            fanout_plot = ggplot2.ggplot(fanout_dt) + ggplot2.aes_string(x="real_node_count", y="fanout") + \
                 ggplot2.stat_bin_2d() + ggplot2.scale_fill_gradientn(trans="log", colours=brewer.brewer_pal(
                     n=9, name="Greens"), na_value="white")
             absolute_filename = os.path.join(structure.exploratory_path(), "absolute_compression.png")

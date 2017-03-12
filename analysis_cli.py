@@ -46,8 +46,9 @@ def _analyse_compression(kwargs):
     """
     Generates the following structure:
 
-    <number of nodes>: {
+    <number of nodes>: {                    # binning node count
         "file": [<string>, ...],
+        "node_count": [<int>, ...],         # real node counts
         "alphabet_count": [<int>, ...],
         "tree_height": [<int>, ...],
         "identity_count": {
@@ -100,6 +101,7 @@ def _analyse_compression(kwargs):
                     current.setdefault(repr(single_signature), []).append(len(compression[index]))
             result.setdefault(node_count, {}).setdefault("file", []).append(filepath)
             result.setdefault(node_count, {}).setdefault("alphabet_count", []).append(len(alphabet))
+            result.setdefault(node_count, {}).setdefault("node_count", []).append(tree.node_count())
             current_fanout = result.setdefault(node_count, {}).setdefault("fanout", {})
             current_fanout.setdefault("min", []).append(min(fanout))
             current_fanout.setdefault("max", []).append(max(fanout))
