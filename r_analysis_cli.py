@@ -131,10 +131,22 @@ def analyse_compression(ctx):
             alphabet_values = (DataFrame(result_dt)
                                .select("tree", "node_count", "alphabet_count")
                                .group_by("tree", "node_count")
-                               .summarize(alphabet_count="mean(alphabet_count)")
-                               .group_by("node_count")
-                               .summarize(alphabet_mean="mean(alphabet_count)",
-                                          alphabet_stderror="sd(alphabet_count)/sqrt(length(alphabet_count))"))
+                               .summarize(alphabet_count="mean(alphabet_count)"))
+            robjects.r("""
+            alphabet_count <- function(data) {
+                require(data.table)
+                data <- data.table(data)
+                result <- data[,.N, by=list(alphabet_count, node_count)]
+                setkey(result, node_count, alphabet_count)
+                max_alphabet_count = max(result$alphabet_count)
+                node_counts <- unique(result$node_count)
+                tmp <- data.table(alphabet_count=rep.int(1:max_alphabet_count, length(node_counts)), node_count=rep(node_counts, each=max_alphabet_count))
+                setkey(tmp, node_count, alphabet_count)
+                result[tmp]
+            }
+            """)
+            alphabet_count = robjects.r["alphabet_count"]
+            alphabet_tmp_dt = alphabet_count(alphabet_values)
             absolute_plot = ggplot2.ggplot(summarized_values) + ggplot2.aes_string(
                 x="node_count", y="compression_mean", color="signature") + \
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
@@ -145,10 +157,10 @@ def analyse_compression(ctx):
                 ggplot2.geom_point() + ggplot2.geom_errorbar(width=.01) + ggplot2.aes_string(
                 ymin="relative_compression_mean-relative_compression_stderror",
                 ymax="relative_compression_mean+relative_compression_stderror")
-            alphabet_plot = ggplot2.ggplot(alphabet_values) + ggplot2.aes_string(
-                x="node_count", y="alphabet_mean") + ggplot2.geom_point() + ggplot2.geom_errorbar() \
-                + ggplot2.aes_string(ymin="alphabet_mean-alphabet_stderror",
-                                     ymax="alphabet_mean+alphabet_stderror", width=.01)
+            alphabet_plot = ggplot2.ggplot(alphabet_tmp_dt) + ggplot2.aes_string(
+                x="node_count", y="alphabet_count", fill="N") + ggplot2.geom_tile(
+                color="white", size=.1) + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
+                    n=9, name="Reds"), na_value="white", name="Count")
 
             robjects.r("""
             fanout_count <- function(data) {
