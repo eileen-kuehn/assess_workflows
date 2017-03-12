@@ -400,9 +400,10 @@ def subset_data(ctx, include_key):
 @click.option("--seed", "seed", type=int)
 @click.option("--repeat", "repeat", type=int, default=1)
 @click.option("--count", "count", type=int, required=True)
+@click.option("--minimum", "minimum", type=int, default=0)
 @click.option("--skip_key", "skip_key", default=False)
 @click.pass_context
-def pick_samples(ctx, seed, repeat, count, skip_key):
+def pick_samples(ctx, seed, repeat, count, minimum, skip_key):
     results = {}
 
     if seed is not None:
@@ -422,7 +423,10 @@ def pick_samples(ctx, seed, repeat, count, skip_key):
                         for _ in xrange(repeat):
                             results.setdefault(key, []).append(random.sample(values, count))
                     except ValueError:
-                        continue
+                        if minimum == 0 or minimum <= len(values):
+                            results.setdefault(key, []).append(values)
+                        else:
+                            continue
             except AttributeError:
                 key = "samples"
                 for _ in xrange(repeat):
