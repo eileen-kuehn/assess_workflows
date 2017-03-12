@@ -57,7 +57,8 @@ def _analyse_compression(kwargs):
             "min": [<int>, ...],
             "max": [<int>, ...],
             "mean": [<float>, ...],
-            "std": [<float>, ...]
+            "std": [<float>, ...],
+            "full": [[<int>, ...], ...]
         }
     }
 
@@ -104,6 +105,7 @@ def _analyse_compression(kwargs):
             current_fanout.setdefault("max", []).append(max(fanout))
             current_fanout.setdefault("mean", []).append(sum(fanout)/float(len(fanout)))
             current_fanout.setdefault("std", []).append(standard_deviation(fanout))
+            current_fanout.setdefault("full", []).append(fanout)
             # TODO: not supported by tree yet
             # result.setdefault(node_count, {}).setdefault("tree_height", []).append(tree.depth)
     return result
@@ -134,7 +136,8 @@ def analyse_compression(ctx, pcount):
             "min": [<int>, ...],
             "max": [<int>, ...],
             "mean": [<float>, ...],
-            "std": [<float>, ...]
+            "std": [<float>, ...],
+            "full": [[<int>, ...], ...]
         }
     }
 

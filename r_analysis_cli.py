@@ -59,10 +59,12 @@ def analyse_compression(ctx):
             from rpy2.robjects.packages import importr
             from rpy2.robjects.lib.dplyr import DataFrame
             import rpy2.robjects.lib.ggplot2 as ggplot2
+            from rpy2 import robjects
 
             grdevices = importr("grDevices")
             datatable = importr("data.table")
             base = importr("base")
+            brewer = importr("RColorBrewer")
 
             input_data = json.load(input_file).get("data", None)
             file_list = []
@@ -74,6 +76,10 @@ def analyse_compression(ctx):
             fanout_max_list = []
             fanout_mean_list = []
             fanout_std_list = []
+            # extra lists for fanouts
+            file_single_list = []
+            fanout_single_list = []
+            node_count_single_list = []
             for node_count, result_data in input_data.items():
                 alphabet_count = result_data.get("alphabet_count", 0)
                 fanout_data = result_data.get("fanout", {})
@@ -82,7 +88,11 @@ def analyse_compression(ctx):
                 fanout_max = fanout_data.get("max", [])
                 fanout_mean = fanout_data.get("mean", [])
                 fanout_std = fanout_data.get("std", [])
+                fanout_full = fanout_data.get("full", [])
                 for index, filepath in enumerate(result_data.get("file", [])):
+                    fanout_single_list.extend(fanout_full[index])
+                    file_single_list.extend([filepath for _ in range(len(fanout_full[index]))])
+                    node_count_single_list.extend([int(node_count) for _ in range(len(fanout_full[index]))])
                     for identity_key, identities in identity_count.items():
                         identity_count_list.append(identities[index])
                         signature_list.append(identity_key)
@@ -94,6 +104,11 @@ def analyse_compression(ctx):
                         fanout_mean_list.append(fanout_mean[index])
                         fanout_std_list.append(fanout_std[index])
 
+            fanout_dt = datatable.data_table(
+                tree=base.unlist(file_single_list),
+                node_count=base.unlist(node_count_single_list),
+                fanout=base.unlist(fanout_single_list)
+            )
             # convert lists to datatable
             result_dt = datatable.data_table(
                 tree=base.unlist(file_list),
@@ -134,12 +149,33 @@ def analyse_compression(ctx):
                 x="node_count", y="alphabet_mean") + ggplot2.geom_point() + ggplot2.geom_errorbar() \
                 + ggplot2.aes_string(ymin="alphabet_mean-alphabet_stderror",
                                      ymax="alphabet_mean+alphabet_stderror", width=.01)
+
+            robjects.r("""
+            fanout_count <- function(data) {
+                require(data.table)
+                result <- data[,.(N=.N, ratio=.N/node_count),by=list(tree,fanout,node_count)]
+                setkey(result, node_count, fanout)
+                max_fanout <- max(result$fanout)
+                node_counts <- unique(result$node_count)
+                tmp <- data.table(fanout=rep.int(1:max_fanout, length(node_counts)), node_count=rep(node_counts, each=max_fanout))
+                setkey(tmp, node_count, fanout)
+                result[tmp]
+            }
+            """)
+            fanout_count = robjects.r["fanout_count"]
+            fanout_tmp_dt = fanout_count(fanout_dt)
+            fanout_plot = ggplot2.ggplot(fanout_tmp_dt) + ggplot2.aes_string(
+                x="node_count", y="fanout", fill="ratio") + ggplot2.geom_tile(color="white", size=.1) \
+                + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
+                    n=9, name="Greens"), na_value="white", name="Fraction")
             absolute_filename = os.path.join(structure.exploratory_path(), "absolute_compression.png")
             relative_filename = os.path.join(structure.exploratory_path(), "relative_compression.png")
             alphabet_filename = os.path.join(structure.exploratory_path(), "alphabet.png")
+            fanout_filename = os.path.join(structure.exploratory_path(), "fanout.png")
             for file_name, plot in {absolute_filename: absolute_plot,
                                     relative_filename: relative_plot,
-                                    alphabet_filename: alphabet_plot}.items():
+                                    alphabet_filename: alphabet_plot,
+                                    fanout_filename: fanout_plot}.items():
                 grdevices.png(file_name)
                 plot.plot()
                 grdevices.dev_off()
@@ -152,7 +188,8 @@ def analyse_compression(ctx):
                     relative_plot=relative_plot, absolute_filename=absolute_filename,
                     relative_filename=relative_filename, summarized_values=summarized_values,
                     alphabet_values=alphabet_values, alphabet_plot=alphabet_plot,
-                    alphabet_filename=alphabet_filename, result_dt=result_dt
+                    alphabet_filename=alphabet_filename, result_dt=result_dt, fanout_dt=fanout_dt,
+                    fanout_filename=fanout_filename, fanout_plot=fanout_plot
                 )
 
 
