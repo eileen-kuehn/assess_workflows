@@ -161,6 +161,8 @@ def analyse_compression(ctx):
                 x="node_count", y="alphabet_count", fill="N") + ggplot2.geom_tile(
                 color="white", size=.1) + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
                     n=9, name="Reds"), na_value="white", name="Count")
+            alphabet_plot = ggplot2.ggplot(alphabet_values) + ggplot2.aes_string(
+                x="as.factor(node_count)", y="alphabet_count") + ggplot2.stat_bin_2d()
 
             robjects.r("""
             fanout_count <- function(data) {
@@ -180,6 +182,9 @@ def analyse_compression(ctx):
                 x="node_count", y="fanout", fill="ratio") + ggplot2.geom_tile(color="white", size=.1) \
                 + ggplot2.scale_fill_gradientn(colours=brewer.brewer_pal(
                     n=9, name="Greens"), na_value="white", name="Fraction")
+            fanout_plot = ggplot2.ggplot(fanout_dt) + ggplot2.aes_string(x="as.factor(node_count)", y="fanout") + \
+                ggplot2.stat_bin_2d() + ggplot2.scale_fill_gradientn(trans="log", colours=brewer.brewer_pal(
+                    n=9, name="Greens"), na_value="white")
             absolute_filename = os.path.join(structure.exploratory_path(), "absolute_compression.png")
             relative_filename = os.path.join(structure.exploratory_path(), "relative_compression.png")
             alphabet_filename = os.path.join(structure.exploratory_path(), "alphabet.png")
