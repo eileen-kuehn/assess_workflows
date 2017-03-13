@@ -1306,6 +1306,45 @@ def analyse_classification(ctx):
             )
 
 
+@click.command()
+@click.pass_context
+def create_histogram(ctx):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+
+            payload_count_list = []
+            filename_list = []
+            for payload_count, results in analysis_data.items():
+                for result in results:
+                    payload_count_list.append(int(payload_count))
+                    filename_list.append(result)
+
+            if ctx.obj.get("save", False):
+                from rpy2.robjects.packages import importr
+                import rpy2.robjects.lib.ggplot2 as ggplot2
+                from rpy2.robjects.lib.dplyr import DataFrame
+
+                base = importr("base")
+                datatable = importr("data.table")
+                result_dt = datatable.data_table(tree=base.unlist(filename_list),
+                                                 payload_count=base.unlist(payload_count_list))
+                hist_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="payload_count") \
+                    + ggplot2.stat_bin() + ggplot2.scale_y_log10()
+                hist_plot_filename = os.path.join(structure.exploratory_path(), "payload_hist.png")
+                _do_the_plotting([(hist_plot, hist_plot_filename,)])
+
+                # save model for further adaptations
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, result_dt=result_dt, hist_plot=hist_plot,
+                    hist_plot_filename=hist_plot_filename
+                )
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -1417,6 +1456,7 @@ cli.add_command(analyse_clustering_score)
 cli.add_command(analyse_tree_progress)
 cli.add_command(analyse_anomalies)
 cli.add_command(analyse_classification)
+cli.add_command(create_histogram)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
