@@ -214,6 +214,23 @@ def index_data_by_number_of_events(ctx, paths):
 
 
 @click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.pass_context
+def index_data_by_number_of_payloads(ctx, paths):
+    results = {}
+    for path in paths:
+        for filename in glob.glob("%s/*/*-process.csv" % path):
+            count = _payload_line_count(filename)
+            results.setdefault(count, []).append(filename)
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_data_by_number_of_payloads")
+    )
+
+
+@click.command()
 @click.pass_context
 def index_data_by_activity(ctx):
     results = {}
@@ -493,6 +510,18 @@ def _line_count(filename):
     return int(subprocess.check_output(["wc", "-l", filename]).strip().split()[0]) - 2
 
 
+def _payload_line_count(filename):
+    result = 0
+    try:
+        grep = subprocess.Popen(["grep", "(condor_starter)", filename], stdout=subprocess.PIPE)
+        wc_result = subprocess.check_output(["wc", "-l"], stdin=grep.stdout)
+        grep.wait()
+        result = wc_result.strip().split()[0]
+    except subprocess.CalledProcessError as e:
+        print(e)
+    return result
+
+
 def _data_by_tme(filename):
     results = MulticoreResult()
     tree_builder = CSVTreeBuilder()
@@ -581,6 +610,7 @@ cli.add_command(index_data_by_uid)
 cli.add_command(index_data_by_number_of_nodes)
 cli.add_command(index_data_by_number_of_traffic_events)
 cli.add_command(index_data_by_number_of_events)
+cli.add_command(index_data_by_number_of_payloads)
 cli.add_command(index_data_by_activity)
 cli.add_command(index_process_names)
 cli.add_command(index_tree_statistics)
