@@ -1,3 +1,4 @@
+from __future__ import division
 import os
 import json
 import logging
@@ -7,6 +8,7 @@ import click
 import rpy2
 import math
 
+import assess_workflows
 from assess.events.events import TrafficEvent, ProcessStartEvent, ProcessExitEvent, \
     EmptyProcessEvent
 from assess.generators.gnm_importer import CSVTreeBuilder
@@ -14,7 +16,7 @@ from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_error, \
     uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation, \
     uncorrelated_relative_deviation_and_standard_error
-from assess_workflows.utils.utils import output_r_data
+from assess_workflows.utils.utils import output_r_data, output_results, determine_version
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
 
@@ -1307,8 +1309,9 @@ def analyse_classification(ctx):
 
 
 @click.command()
+@click.option("--prefix", "prefix", type=str, default="")
 @click.pass_context
-def create_histogram(ctx):
+def create_histogram(ctx, prefix):
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
@@ -1316,11 +1319,11 @@ def create_histogram(ctx):
         with open(file_path, "r") as input_file:
             analysis_data = json.load(input_file).get("data", None)
 
-            payload_count_list = []
+            value_list = []
             filename_list = []
-            for payload_count, results in analysis_data.items():
+            for value, results in analysis_data.items():
                 for result in results:
-                    payload_count_list.append(int(payload_count))
+                    value_list.append(int(value))
                     filename_list.append(result)
 
             if ctx.obj.get("save", False):
@@ -1331,10 +1334,10 @@ def create_histogram(ctx):
                 base = importr("base")
                 datatable = importr("data.table")
                 result_dt = datatable.data_table(tree=base.unlist(filename_list),
-                                                 payload_count=base.unlist(payload_count_list))
-                hist_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="payload_count") \
+                                                 value=base.unlist(value_list))
+                hist_plot = ggplot2.ggplot(result_dt) + ggplot2.aes_string(x="value") \
                     + ggplot2.stat_bin() + ggplot2.scale_y_log10()
-                hist_plot_filename = os.path.join(structure.exploratory_path(), "payload_hist.png")
+                hist_plot_filename = os.path.join(structure.exploratory_path(), "%s_hist.png" % prefix)
                 _do_the_plotting([(hist_plot, hist_plot_filename,)])
 
                 # save model for further adaptations
@@ -1342,6 +1345,22 @@ def create_histogram(ctx):
                 output_r_data(
                     ctx=ctx, filename=rdata_filename, result_dt=result_dt, hist_plot=hist_plot,
                     hist_plot_filename=hist_plot_filename
+                )
+                # save statistical data
+                latex_results = ""
+                for variant, value_list in [("min", min(value_list),),
+                                       ("max", max(value_list),),
+                                       ("mean", sum(value_list) / len(value_list),),
+                                       ("median", sorted(value_list)[int(len(
+                                           value_list)/2)])]:
+                    latex_results += "\\def\%sdistribution%s{%s}\n" % (prefix, variant, value_list)
+                output_results(
+                    ctx=ctx,
+                    results=latex_results,
+                    version=determine_version(os.path.dirname(assess_workflows.__file__)),
+                    source="%s (%s)" % (__file__, "create_histogram"),
+                    file_type="tex",
+                    comment_sign="%"
                 )
 
 
