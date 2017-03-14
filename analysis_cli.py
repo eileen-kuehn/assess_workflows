@@ -42,6 +42,31 @@ def cli(ctx, basepath, workflow_name, step, save, use_input, configuration):
     ctx.obj["configurations"] = configdict.configurations
 
 
+def _analyse_duration(kwargs):
+    """
+    Generates the following structure:
+
+    <duration>: [<file>, ...]
+
+    :param filepath: Path for tree to consider
+    :param kwargs:
+    :return:
+    """
+    result = MulticoreResult()
+    filepath = kwargs.get("filepath", None)
+    tree_builder = CSVTreeBuilder()
+    try:
+        tree = tree_builder.build(filepath)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
+        if tree is not None:
+            root = tree.root()
+            duration = root.exit_tme - root.tme
+            result.setdefault(duration, []).append(filepath)
+    return result
+
+
 def _analyse_compression(kwargs):
     """
     Generates the following structure:
@@ -111,6 +136,56 @@ def _analyse_compression(kwargs):
             # TODO: not supported by tree yet
             # result.setdefault(node_count, {}).setdefault("tree_height", []).append(tree.depth)
     return result
+
+
+@click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def analyse_duration(ctx, pcount):
+    """
+    Method prepares duration data for further analysis.
+
+    :param ctx:
+    :param pcount:
+    :return:
+    """
+    results = MulticoreResult()
+    ctx.obj["json"] = True
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_files = json.load(input_file).get("data", None)
+            data = []
+            for node_count, tree_paths in analysis_files.items():
+                for tree_path in tree_paths:
+                    if isinstance(tree_path, list):
+                        for path in tree_path:
+                            data.append({
+                                "filepath": path
+                            })
+                    else:
+                        data.append({
+                            "filepath": tree_path
+                        })
+            if pcount > 1:
+                multicore_result = do_multicore(
+                    count=pcount,
+                    target=_analyse_duration,
+                    data=data
+                )
+                for result in multicore_result:
+                    results += result
+            else:
+                for elem in data:
+                    results += _analyse_duration(elem)
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "analyse_duration")
+    )
 
 
 @click.command()
@@ -547,6 +622,7 @@ def _analyse_diamonds(kwargs):
                 current_result.setdefault("files", []).append(filepath)
     return result
 
+cli.add_command(analyse_duration)
 cli.add_command(analyse_compression)
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
