@@ -1364,6 +1364,74 @@ def create_histogram(ctx, prefix):
                 )
 
 
+@click.command()
+@click.option("--keys", "keys", multiple=True, required=True)
+@click.pass_context
+def analyse_full_statistics(ctx, keys):
+    def field_name(key, expanded=False):
+        splitted = key.split("(")
+        name = str(splitted[len(splitted)-1].split(")")[0])
+        if expanded and len(splitted) > 2:
+            return str("%s_%s" % (splitted[1], name))
+        return str("%s" % name)
+
+    def field_value(key, data):
+        result = data
+        splitted = key.split("(")
+        if len(splitted) > 2:
+            method = splitted[1]
+            if "mean" in method:
+                try:
+                    result = sum(data) / len(data)
+                except ZeroDivisionError:
+                    result = 0
+            elif "max" in method:
+                try:
+                    result = max(data)
+                except ValueError:
+                    result = 0
+        return result
+
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+
+            value_lists = {}
+            for value, results in analysis_data.items():
+                for key in keys:
+                    if key.startswith("hist"):
+                        # prepare histogram data
+                        data_key = field_name(key)
+                        value_lists.setdefault(key, {})[value] = field_value(
+                            key, results.get(data_key, None))
+
+            if ctx.obj.get("save", False):
+                from rpy2.robjects.packages import importr
+                import rpy2.robjects.lib.ggplot2 as ggplot2
+                from rpy2.robjects.lib.dplyr import DataFrame
+
+                base = importr("base")
+                datatable = importr("data.table")
+
+                data = {}
+                plots = {}
+                for key in keys:
+                    if key.startswith("hist"):
+                        result_dt = datatable.data_table(identifier=base.unlist(value_lists.get(key).keys()),
+                                                         value=base.unlist(value_lists.get(key).values()))
+                        data["data_%s" % field_name(key, expanded=True)] = result_dt
+                        plots["hist_%s" % field_name(key, expanded=True)] = ggplot2.ggplot(result_dt) + \
+                            ggplot2.aes_string(x="value") + ggplot2.stat_bin() + \
+                            ggplot2.scale_y_log10()
+                _do_the_plotting([(value, os.path.join(structure.exploratory_path(), "%s.png" % key)) for key, value in plots.items()])
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                plots.update(data)
+                output_r_data(ctx=ctx, filename=rdata_filename, **plots)
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -1476,6 +1544,7 @@ cli.add_command(analyse_tree_progress)
 cli.add_command(analyse_anomalies)
 cli.add_command(analyse_classification)
 cli.add_command(create_histogram)
+cli.add_command(analyse_full_statistics)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
