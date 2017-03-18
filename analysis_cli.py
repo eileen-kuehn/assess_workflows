@@ -138,6 +138,142 @@ def _analyse_compression(kwargs):
     return result
 
 
+def _full_statistics(kwargs):
+    """
+    :param filepath: Path for tree to consider
+    :param kwargs:
+    :return:
+    """
+    filepath = kwargs.get("filepath", None)
+    result = MulticoreResult()
+    tree_bilder = CSVTreeBuilder()
+    try:
+        tree = tree_bilder.build(filepath)
+    except (DataNotInCacheException, TreeInvalidatedException):
+        pass
+    else:
+        if tree is not None:
+            attributes_on_nodes = 0
+            nodes_with_attributes = 0
+            alphabet = set()
+            fanout = []
+            complete_fanout = []
+            depth = []
+            complete_depth = []
+            attribute_events = []
+            for node in tree.node_iter():
+                # check if node has traffic
+                attribute_count = 0
+                if node.traffic:
+                    current_count = 0
+                    available_attributes = set()
+                    for traffic in node.traffic:
+                        if traffic.in_rate > 0:
+                            current_count += 1
+                            available_attributes.add("%s_in_rate" % traffic.conn_cat)
+                        if traffic.out_rate > 0:
+                            current_count += 1
+                            available_attributes.add("%s_out_rate" % traffic.conn_cat)
+                    attribute_count = len(available_attributes)
+                    attributes_on_nodes += attribute_count
+                    attribute_events.append(current_count)
+                    nodes_with_attributes += 1
+                if len(node.children_list()) > 0:
+                    # determine fanout
+                    fanout.append(len(node.children_list()))
+                    if attribute_count > 0:
+                        complete_fanout.append(len(node.children_list()) + attribute_count)
+                    else:
+                        complete_fanout.append(len(node.children_list()))
+                else:
+                    # node is a leaf, so determine depth in tree
+                    current_depth = node.depth()
+                    depth.append(current_depth)
+                    if attribute_count > 0:
+                        complete_depth.extend([current_depth + 1 for _ in range(attribute_count)])
+                    else:
+                        complete_depth.append(current_depth)
+                alphabet.add(node.name)
+            current_result = result.setdefault(filepath, {})
+            current_result["node_count"] = tree.node_count()
+            current_result["complete_node_count"] = tree.node_count() + attributes_on_nodes
+            current_result["nodes_with_attribute_count"] = nodes_with_attributes
+            current_result["alphabet_count"] = len(alphabet)
+            current_result["duration"] = tree.root().exit_tme - tree.root().tme
+            current_result["fanout"] = fanout
+            current_result["complete_fanout"] = complete_fanout
+            current_result["depth"] = depth
+            current_result["complete_depth"] = complete_depth
+            current_result["attribute_event_count"] = attribute_events
+    return result
+
+
+
+@click.command()
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def full_statistics(ctx, pcount):
+    """
+    Method prepares full statistics about a dataset. The output is as follows:
+
+    {
+        <filename>: {
+            "node_count": <int>,  # number of nodes in tree
+            "complete_node_count": <int>,  # number of nodes in tree w attributes
+            "nodes_with_attribute_count": <int>,  # number of nodes that contain attributes
+            "alphabet_count": <int>,  # alphabet count
+            "duration": <int>,  # duration of tree
+            "fanout": [<int>, ...],  # fanout of nodes
+            "complete_fanout": [<int>, ...]  # fanout of nodes w attributes
+            "depth": [<int>, ...],  # depth in tree for leaves
+            "complete_depth": [<int>, ...],  # depth in tree for leaves w attributes
+            "attribute_event_count": [<int>, ...]  # events for attributes per node
+        }
+    }
+
+    :param ctx:
+    :param pcount:
+    :return:
+    """
+    results = MulticoreResult()
+    ctx.obj["json"] = True
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_files = json.load(input_file).get("data", None)
+            data = []
+            for node_count, tree_paths in analysis_files.items():
+                for tree_path in tree_paths:
+                    if isinstance(tree_path, list):
+                        for path in tree_path:
+                            data.append({
+                                "filepath": path
+                            })
+                    else:
+                        data.append({
+                            "filepath": tree_path
+                        })
+            if pcount > 1:
+                multicore_result = do_multicore(
+                    count=pcount,
+                    target=_full_statistics,
+                    data=data
+                )
+                for result in multicore_result:
+                    results += result
+            else:
+                for elem in data:
+                    results += _full_statistics(elem)
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "full_statistics")
+    )
+
+
 @click.command()
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
@@ -627,6 +763,7 @@ cli.add_command(analyse_compression)
 cli.add_command(analyse_metric)
 cli.add_command(analyse_diamonds)
 cli.add_command(analyse_diamond_perturbations)
+cli.add_command(full_statistics)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
