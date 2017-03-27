@@ -1365,6 +1365,74 @@ def create_histogram(ctx, prefix):
 
 
 @click.command()
+@click.pass_context
+def analyse_ensemble(ctx):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            result = analysis_data.get("results")[0][0]
+            decorator = result.get("decorator")
+            distance_list = []
+            type_list = []
+            probability_list = []
+            relative_distance_list = []
+            for index, prototype in enumerate(analysis_data.get("prototypes")[0]):
+                for type in ["p", "pq", "ensemble"]:
+                    type_list.append(type)
+                    probability_list.append(float(prototype))
+                    if "pq" in type:
+                        distance_list.append(float(decorator.get("matrix")[0][1][index]))
+                        relative_distance_list.append(float(decorator.get("normalized_matrix")[0][1][index]))
+                    elif "ensemble" in type:
+                        distance_list.append(float(decorator.get("ensembles")[0][index]))
+                        relative_distance_list.append(float(decorator.get("normalized_ensembles")[0][index]))
+                    else:
+                        distance_list.append(float(decorator.get("matrix")[0][0][index]))
+                        relative_distance_list.append(float(decorator.get("normalized_matrix")[0][0][index]))
+            if ctx.obj.get("save", False):
+                from rpy2.robjects.packages import importr
+                import rpy2.robjects.lib.ggplot2 as ggplot2
+                from rpy2.robjects.lib.dplyr import DataFrame
+
+                base = importr("base")
+                datatable = importr("data.table")
+                result_dt = datatable.data_table(probability=base.unlist(probability_list),
+                                                 distance=base.unlist(distance_list),
+                                                 normalized_distance=base.unlist(relative_distance_list),
+                                                 type=base.unlist(type_list))
+                summarized_dt = (DataFrame(result_dt)
+                                 .group_by("probability", "type")
+                                 .summarize(distance_mean="mean(distance)",
+                                            normalized_distance_mean="mean(normalized_distance)",
+                                            distance_stderror="sd(distance)/sqrt(length(distance))",
+                                            normalized_distance_stderror="sd(normalized_distance)/sqrt(length(normalized_distance))"))
+
+                def create_plot(variant_mean, variant_stderror):
+                    return ggplot2.ggplot(summarized_dt) + ggplot2.aes_string(
+                        x="probability", y="%s" % variant_mean, colour="type") + \
+                           ggplot2.geom_point() + ggplot2.geom_errorbar() + ggplot2.aes_string(
+                        ymin="%s-%s" % (variant_mean, variant_stderror), ymax="%s+%s" % (
+                            variant_mean, variant_stderror))
+                ensemble_plot = create_plot("distance_mean", "distance_stderror")
+                normalised_ensemble_plot = create_plot("normalized_distance_mean", "normalized_distance_stderror")
+                ensemble_plot_filename = os.path.join(structure.exploratory_path(), "ensemble_usecase.png")
+                normalised_ensemble_plot_filename = os.path.join(structure.exploratory_path(), "relative_ensemble_usecase.png")
+                _do_the_plotting([(ensemble_plot, ensemble_plot_filename,),
+                                  (normalised_ensemble_plot, normalised_ensemble_plot_filename,)])
+
+                rdata_filename = structure.intermediate_file_path(file_type="RData")
+                output_r_data(
+                    ctx=ctx, filename=rdata_filename, result_dt=result_dt, summarized_dt=summarized_dt,
+                    ensemble_plot=ensemble_plot, ensemble_plot_filename=ensemble_plot_filename,
+                    relative_ensemble_plot=normalised_ensemble_plot,
+                    relative_ensemble_plot_filename=normalised_ensemble_plot_filename
+                )
+
+
+@click.command()
 @click.option("--keys", "keys", multiple=True, required=True)
 @click.pass_context
 def analyse_full_statistics(ctx, keys):
@@ -1562,6 +1630,7 @@ cli.add_command(analyse_anomalies)
 cli.add_command(analyse_classification)
 cli.add_command(create_histogram)
 cli.add_command(analyse_full_statistics)
+cli.add_command(analyse_ensemble)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
