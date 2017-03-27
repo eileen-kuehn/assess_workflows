@@ -35,10 +35,23 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
 
 
 def _generate_perturbated_tree(kwargs):
+    """
+    :param kwargs:
+    :param filepath: Path to consider
+    :param probabilities: List of probabilites
+    :param repeat: How often to repeat a single probability
+    :param insert_probability: Probability to insert item
+    :param delete_probability: Probability to delete item
+    :param change_probability: Probability to change item
+    :return:
+    """
     result = MulticoreResult()
     filepath = kwargs.get("filepath", None)
     probabilities = kwargs.get("probabilities", [])
     repeat = kwargs.get("repeat", 1)
+    insert_probability = kwargs.get("insert_probability", 0)
+    delete_probability = kwargs.get("delete_probability", 0)
+    change_probability = kwargs.get("change_probability", 0)
 
     tree_builder = CSVTreeBuilder()
     tree = tree_builder.build(filepath)
@@ -51,8 +64,9 @@ def _generate_perturbated_tree(kwargs):
                                                 FanoutWeightedTreeEditDistanceCost(),
                                                 SubtreeWeightedTreeEditDistanceCost(),
                                                 SubtreeHeightWeightedTreeEditDistanceCost()],
-                                         operation_generator=RandomOperation(insert_probability=.5,
-                                                                             delete_probability=.5),
+                                         operation_generator=RandomOperation(insert_probability=insert_probability,
+                                                                             delete_probability=delete_probability,
+                                                                             edit_probability=change_probability),
                                          probability=probability)
             for _ in xrange(repeat):
                 perturbated_tree = ted_generator.generate(tree)
@@ -65,8 +79,12 @@ def _generate_perturbated_tree(kwargs):
 @click.option("--repeat", "repeat", type=int, default=1)
 @click.option("--probabilities", "probabilities", type=float, multiple=True)
 @click.option("--pcount", "pcount", type=int, default=1)
+@click.option("--insert_probability", "insert_probability", type=float, default=0)
+@click.option("--delete_probability", "delete_probability", type=float, default=0)
+@click.option("--change_probability", "change_probability", type=float, default=0)
 @click.pass_context
-def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
+def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probability,
+                              delete_probability, change_probability, pcount):
     if seed is not None:
         random.seed(seed)
     results = MulticoreResult()
@@ -79,7 +97,10 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
                 data = [{
                     "filepath": item,
                     "repeat": repeat,
-                    "probabilities": probabilities
+                    "probabilities": probabilities,
+                    "insert_probability": insert_probability,
+                    "delete_probability": delete_probability,
+                    "change_probability": change_probability
                 } for sample in samples for item in sample]
                 multicore_results = do_multicore(
                     count=pcount,
@@ -94,7 +115,10 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, pcount):
                         results += _generate_perturbated_tree({
                             "filepath": item,
                             "repeat": repeat,
-                            "probabilities": probabilities
+                            "probabilities": probabilities,
+                            "insert_probability": insert_probability,
+                            "delete_probability": delete_probability,
+                            "change_probability": change_probability
                         })
         if ctx.obj.get("save"):
             # instead of storing all results as one, we split them per base tree
