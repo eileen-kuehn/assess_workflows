@@ -1418,18 +1418,35 @@ def analyse_full_statistics(ctx, keys):
 
                 data = {}
                 plots = {}
+                latex_results = ""
+                prefix = "payload"
                 for key in keys:
                     if key.startswith("hist"):
+                        values = value_lists.get(key).values()
+                        current_field_name = field_name(key, expanded=True)
+                        for variant, value_list in [("min", min(values),),
+                                                    ("max", max(values),),
+                                                    ("mean", sum(values) / len(values),),
+                                                    ("median", sorted(values)[int(len(values)/2)])]:
+                            latex_results += "\\def\%s%sfullstatistics%s{%s}\n" % (prefix, current_field_name.replace("_", ""), variant, value_list)
                         result_dt = datatable.data_table(identifier=base.unlist(value_lists.get(key).keys()),
-                                                         value=base.unlist(value_lists.get(key).values()))
-                        data["data_%s" % field_name(key, expanded=True)] = result_dt
-                        plots["hist_%s" % field_name(key, expanded=True)] = ggplot2.ggplot(result_dt) + \
+                                                         value=base.unlist(values))
+                        data["data_%s" % current_field_name] = result_dt
+                        plots["hist_%s" % current_field_name] = ggplot2.ggplot(result_dt) + \
                             ggplot2.aes_string(x="value") + ggplot2.stat_bin() + \
                             ggplot2.scale_y_log10()
                 _do_the_plotting([(value, os.path.join(structure.exploratory_path(), "%s.png" % key)) for key, value in plots.items()])
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 plots.update(data)
                 output_r_data(ctx=ctx, filename=rdata_filename, **plots)
+                output_results(
+                    ctx=ctx,
+                    results=latex_results,
+                    version=determine_version(os.path.dirname(assess_workflows.__file__)),
+                    source="%s (%s)" % (__file__, "analyse_full_statistics"),
+                    file_type="tex",
+                    comment_sign="%"
+                )
 
 
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
