@@ -384,6 +384,14 @@ def squish_index_into_ranges(ctx, range_width, maximum_chain):
 @click.option("--include_key", "include_key", default="lambda key, value: False")
 @click.pass_context
 def subset_data(ctx, include_key):
+    """
+    Example Usage of this method:
+        include_key="'lambda key, value: int(key) > 25'"
+
+    :param ctx:
+    :param include_key:
+    :return:
+    """
     results = {}
     if ctx.obj.get("use_input", False):
         include_key = eval(include_key)
