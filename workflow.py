@@ -89,26 +89,27 @@ def process_as_vector(ctx, trees, representatives):
 def batch_process_from_pkl(ctx, pcount):
     results = _init_results()
     results["distance"] = []
+    results["prototypes"] = []
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path(file_type="pkl")
         with open(file_path, "r") as input_file:
+            data = []
+            # HEADER
+            # ######
+            # results are split into a header and data files
+            # see data_generation_cli.generate_perturbated_tree
+            tree_metadata = pickle.load(input_file)
+            results["files"] = tree_metadata.keys()
+            for key, pkl_path in tree_metadata.items():
+                # tree is stored in "tree"
+                # distorted trees in "perturbated_tree"
+                data.append({
+                    "data_pkl_path": pkl_path,
+                    "data_pkl_key": key,
+                    "configurations": ctx.obj["configurations"]
+                })
             if pcount > 1:
-                data = []
-                # HEADER
-                # ######
-                # results are split into a header and data files
-                # see data_generation_cli.generate_perturbated_tree
-                tree_metadata = pickle.load(input_file)
-                results["files"] = tree_metadata.keys()
-                for key, pkl_path in tree_metadata.items():
-                    # tree is stored in "tree"
-                    # distorted trees in "perturbated_tree"
-                    data.append({
-                        "data_pkl_path": pkl_path,
-                        "data_pkl_key": key,
-                        "configurations": ctx.obj["configurations"]
-                    })
                 result_list = (
                     do_multicore(
                         count=pcount,
@@ -119,8 +120,13 @@ def batch_process_from_pkl(ctx, pcount):
                 for result in result_list:
                     results["results"].append(result['results'])
                     results["distance"].append(result['precalculated_costs'])
+                    results["prototypes"].append(result["prototypes"])
             else:
-                raise NotImplementedError
+                for elem in data:
+                    result = _process_configurations_for_row(elem)
+                    results["results"].append(result["results"])
+                    results["distance"].append(result["precalculated_costs"])
+                    results["prototypes"].append(result["prototypes"])
     output_results(
         ctx=ctx,
         results=results,
@@ -338,6 +344,7 @@ def _init_results():
 
 def _process_configurations_for_row(kwargs):
     results = []
+    prototype_keys = []
     precalculated_costs = {}
     with ExceptionFrame():
         data_pkl_path = kwargs.pop('data_pkl_path')
@@ -345,7 +352,10 @@ def _process_configurations_for_row(kwargs):
         with open(data_pkl_path) as input_pkl:
             raw_data = pickle.load(input_pkl)[data_pkl_key]
         tree = raw_data['tree']
-        prototypes = [ptree for ptrees in raw_data["perturbated_tree"].values() for ptree in ptrees]
+        prototypes = []
+        for pkey, ptrees in raw_data["perturbated_tree"].items():
+            prototype_keys.extend([pkey for _ in xrange(len(ptrees))])
+            prototypes.extend(ptrees)
         # extract precalculated distances
         for perturbated_tree in prototypes:
             # append precalculated distances
@@ -378,7 +388,7 @@ def _process_configurations_for_row(kwargs):
                             "event_streamer": "%s" % GNMCSVEventStreamer(csv_path=None),
                             "decorator": decorator.descriptive_data()
                         })
-    return {'results': results, 'precalculated_costs': precalculated_costs}
+    return {'results': results, 'precalculated_costs': precalculated_costs, "prototypes": prototype_keys}
 
 
 def _process_configurations(prototypes, configurations, event_generator):
@@ -505,7 +515,7 @@ cli.add_command(batch_process_as_vector)
 cli.add_command(batch_process_from_pkl)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
+    logging.getLogger().setLevel(LVL.ERROR)
     logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
     with ExceptionFrame():
         cli(obj={}, auto_envvar_prefix='DISS')
