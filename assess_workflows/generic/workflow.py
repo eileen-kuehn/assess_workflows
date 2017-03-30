@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import shlex
 import subprocess
 
@@ -103,6 +104,8 @@ class Workflow(object):
             (':' + os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else '')
         for index, task in enumerate(self._tasks[start:end], start=start):
             print("starting task %d of %d (%s)" % (index+1, len(self._tasks), task.name))
+            start = time.time()
             current_environment = environment.copy()
             current_environment.update(task.env)
             subprocess.check_call(task.build_subprocess(index=index+1), env=current_environment)
+            print("--> finished task after %.2f s" % (time.time() - start))
