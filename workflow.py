@@ -135,35 +135,66 @@ def batch_process_from_pkl(ctx, pcount):
     )
 
 
+def _batch_process_as_vector(kwargs):
+    """
+    :param kwargs:
+    :param configurations:
+    :param files:
+    :param prototypes:
+    :param key:
+    :return:
+    """
+    def path_generator():
+        for path in prototypes:
+            yield (path, 1)
+
+    with ExceptionFrame():
+        files = kwargs.get("files", None)
+        prototypes = kwargs.get("prototypes", None)
+        configurations = kwargs.get("configurations", None)
+        key = kwargs.get("key", None)
+        result = _init_results()
+        result["files"] = files
+        result["prototypes"] = prototypes
+        result["results"] = _process_configurations(
+            prototypes=_initialise_prototypes(files),
+            configurations=configurations,
+            event_generator=path_generator
+        )
+        result["key"] = key
+    return result
+
+
 @click.command()
+@click.option("--pcount", "pcount", default=1)
 @click.pass_context
-def batch_process_as_vector(ctx):
+def batch_process_as_vector(ctx, pcount):
     results = []
 
     if ctx.obj.get("use_input", False):
-        def path_generator():
-            for path in value[1:]:
-                yield (path, 1)
-
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data")
+            data = []
             for key, values in input_data.items():
                 for value in values:
-                    results.append(_init_results())
                     if len(value) == 1:
                         # element is file and prototype at the same time
                         value.append(value[0])
-                    # first element is tree, second is representative
-                    results[-1]["files"] = value[:1]
-                    results[-1]["prototypes"] = value[1:]
-                    results[-1]["results"] = _process_configurations(
-                        prototypes=_initialise_prototypes(value[:1]),
-                        configurations=ctx.obj["configurations"],
-                        event_generator=path_generator
-                    )
-                    results[-1]["key"] = key
+                    data.append({
+                        "configurations": ctx.obj["configurations"],
+                        "files": value[:1],
+                        "prototypes": value[1:],
+                        "key": key
+                    })
+            if pcount > 1:
+                values = do_multicore(pcount, _batch_process_as_vector, data)
+                for value in values:
+                    results.append(value)
+            else:
+                for elem in data:
+                    results.append(_batch_process_as_vector(elem))
 
     output_results(
         ctx=ctx,
