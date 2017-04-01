@@ -5,7 +5,6 @@ import logging
 import re
 
 import click
-import rpy2
 import math
 
 import assess_workflows
@@ -13,9 +12,8 @@ from assess.events.events import TrafficEvent, ProcessStartEvent, ProcessExitEve
     EmptyProcessEvent
 from assess.generators.gnm_importer import CSVTreeBuilder
 from assess_workflows.generic.structure import Structure
-from assess_workflows.utils.statistics import uncorrelated_relative_error, \
-    uncorrelated_relative_distance_deviation, uncorrelated_relative_max_distance_deviation, \
-    uncorrelated_relative_deviation_and_standard_error
+from assess_workflows.utils.statistics import uncorrelated_relative_max_distance_deviation, \
+    standard_deviation, mean
 from assess_workflows.utils.utils import output_r_data, output_results, determine_version
 from utility.exceptions import ExceptionFrame
 from utility.report import LVL
@@ -1518,8 +1516,9 @@ def analyse_full_statistics(ctx, keys):
 
 
 @click.command()
+@click.option("--prefix", "prefix", default="", type=str)
 @click.pass_context
-def analyse_performance(ctx):
+def analyse_performance(ctx, prefix):
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
@@ -1533,9 +1532,15 @@ def analyse_performance(ctx):
             prototype_node_count_list = []
             tree_identity_count_list = []
             prototype_identity_count_list = []
-            signature_performance_list = []
-            distance_performance_list = []
-            performance_list = []
+            mean_signature_performance_list = []
+            sum_signature_performance_list = []
+            stderror_signature_performance_list = []
+            mean_distance_performance_list = []
+            sum_distance_performance_list = []
+            stderror_distance_performance_list = []
+            mean_performance_list = []
+            sum_performance_list = []
+            stderror_performance_list = []
             for current_data in analysis_data:
                 results = current_data.get("results")
                 for result in results:
@@ -1547,12 +1552,19 @@ def analyse_performance(ctx):
                     #   accumulated_distance_performance
                     #   accumulated_performance
                     decorator = result.get("decorator", {})
-                    signature_performance_list.append(decorator.get(
-                        "accumulated_signature_performance", [])[0])
-                    distance_performance_list.append(decorator.get(
-                        "accumulated_distance_performance", [])[0])
-                    performance_list.append(decorator.get(
-                        "accumulated_performance", [])[0])
+                    signature_performances = decorator.get("signature_performance", [])[0]
+                    distance_performances = decorator.get("distance_performance", [])[0]
+                    performances = decorator.get("performance", [])[0]
+                    mean_signature_performance_list.append(mean(signature_performances))
+                    sum_signature_performance_list.append(sum(signature_performances))
+                    stderror_signature_performance_list.append(standard_deviation(signature_performances))
+                    mean_distance_performance_list.append(mean(distance_performances))
+                    sum_distance_performance_list.append(sum(distance_performances))
+                    stderror_distance_performance_list.append(standard_deviation(distance_performances))
+                    mean_performance_list.append(mean(performances))
+                    sum_performance_list.append(sum(performances))
+                    stderror_performance_list.append(standard_deviation(performances))
+
                     data = decorator.get("data", {})
                     tree_node_count_list.append(data.get("monitoring", {}).get("original", [])[0][0])
                     tree_identity_count_list.append(data.get("monitoring", {}).get("converted", [])[0][0])
@@ -1573,17 +1585,31 @@ def analyse_performance(ctx):
                                                  prototype_node_count=base.unlist(prototype_node_count_list),
                                                  tree_identity_count=base.unlist(tree_identity_count_list),
                                                  prototype_identity_count=base.unlist(prototype_identity_count_list),
-                                                 signature_performance=base.unlist(signature_performance_list),
-                                                 distance_performance=base.unlist(distance_performance_list),
-                                                 performance=base.unlist(performance_list))
+                                                 mean_signature_performance=base.unlist(mean_signature_performance_list),
+                                                 sum_signature_performance=base.unlist(sum_signature_performance_list),
+                                                 stderror_signature_performance=base.unlist(stderror_signature_performance_list),
+                                                 mean_distance_performance=base.unlist(mean_distance_performance_list),
+                                                 sum_distance_performance=base.unlist(sum_distance_performance_list),
+                                                 stderror_distance_performance=base.unlist(stderror_distance_performance_list),
+                                                 mean_performance=base.unlist(mean_performance_list),
+                                                 sum_performance=base.unlist(sum_performance_list),
+                                                 stderror_performance=base.unlist(stderror_performance_list))
                 summarized_data = (DataFrame(result_dt)
                                    .group_by("algorithm", "signature", "dimension")
-                                   .summarize(signature_performance_mean="mean(signature_performance)",
-                                              distance_performance_mean="mean(distance_performance)",
-                                              performance_mean="mean(performance)",
-                                              signature_performance_stderror="sd(signature_performance)/sqrt(length(signature_performance))",
-                                              distance_performance_stderror="sd(distance_performance)/sqrt(length(distance_performance))",
-                                              performance_stderror="sd(performance)/sqrt(length(performance))"))
+                                   .summarize(signature_performance_mean="mean(sum_signature_performance)",
+                                              distance_performance_mean="mean(sum_distance_performance)",
+                                              performance_mean="mean(sum_performance)",
+                                              signature_performance_stderror="sd(sum_signature_performance)/sqrt(length(sum_signature_performance))",
+                                              distance_performance_stderror="sd(sum_distance_performance)/sqrt(length(sum_distance_performance))",
+                                              performance_stderror="sd(sum_performance)/sqrt(length(sum_performance))"))
+                summarized_mean_data = (DataFrame(result_dt)
+                                        .group_by("algorithm", "signature", "dimension")
+                                        .summarize(signature_performance_mean="mean(mean_signature_performance)",
+                                                   distance_performance_mean="mean(mean_distance_performance)",
+                                                   performance_mean="mean(mean_performance)",
+                                                   signature_performance_stderror="sd(mean_signature_performance)/sqrt(length(mean_signature_performance))",
+                                                   distance_performance_stderror="sd(mean_distance_performance)/sqrt(length(mean_distance_performance))",
+                                                   performance_stderror="sd(mean_performance)/sqrt(length(mean_performance))"))
 
                 def create_plot(data, performance_object):
                     return ggplot2.ggplot(data) + ggplot2.aes_string(
@@ -1593,24 +1619,45 @@ def analyse_performance(ctx):
                             performance_object, performance_object), ymin="%s_mean-%s_stderror" % (
                             performance_object, performance_object)))
                 signature_performance_plot = create_plot(summarized_data, "signature_performance")
-                signature_performance_plot_filename = os.path.join(structure.exploratory_path(), "signature_performance.png")
+                mean_signature_performance_plot = create_plot(summarized_mean_data, "signature_performance")
+                signature_performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_signature_performance.png" % prefix)
+                mean_signature_performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_mean_signature_performance.png" % prefix)
                 distance_performance_plot = create_plot(summarized_data, "distance_performance")
-                distance_performance_plot_filename = os.path.join(structure.exploratory_path(), "distance_performance.png")
+                mean_distance_performance_plot = create_plot(summarized_mean_data, "distance_performance")
+                distance_performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_distance_performance.png" % prefix)
+                mean_distance_performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_mean_distance_performance.png" % prefix)
                 performance_plot = create_plot(summarized_data, "performance")
-                performance_plot_filename = os.path.join(structure.exploratory_path(), "performance.png")
+                mean_performance_plot = create_plot(summarized_mean_data, "performance")
+                performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_performance.png" % prefix)
+                mean_performance_plot_filename = os.path.join(
+                    structure.exploratory_path(), "%s_mean_performance.png" % prefix)
                 _do_the_plotting([(signature_performance_plot, signature_performance_plot_filename,),
+                                  (mean_signature_performance_plot, mean_signature_performance_plot_filename,),
                                   (distance_performance_plot, distance_performance_plot_filename,),
-                                  (performance_plot, performance_plot_filename,)])
+                                  (mean_distance_performance_plot, mean_distance_performance_plot_filename,),
+                                  (performance_plot, performance_plot_filename,),
+                                  (mean_performance_plot, mean_performance_plot_filename)])
 
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
                 output_r_data(
                     ctx=ctx, filename=rdata_filename, result_dt=result_dt,
-                    summarized_data=summarized_data, signature_performance_plot=signature_performance_plot,
+                    summarized_data=summarized_data, summarized_mean_data=summarized_mean_data,
+                    signature_performance_plot=signature_performance_plot,
+                    mean_signature_performance_plot=mean_signature_performance_plot,
                     signature_performance_plot_filename=signature_performance_plot_filename,
+                    mean_signature_performance_plot_filename=mean_signature_performance_plot_filename,
                     distance_performance_plot=distance_performance_plot,
+                    mean_distance_performance_plot=mean_distance_performance_plot,
                     distance_performance_plot_filename=distance_performance_plot_filename,
-                    performance_plot=performance_plot,
-                    performance_plot_filename=performance_plot_filename
+                    mean_distance_performance_plot_filename=mean_distance_performance_plot_filename,
+                    performance_plot=performance_plot, mean_performance_plot=mean_performance_plot,
+                    performance_plot_filename=performance_plot_filename,
+                    mean_performance_plot_filename=mean_performance_plot_filename
                 )
 
 
