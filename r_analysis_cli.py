@@ -1548,11 +1548,11 @@ def analyse_performance(ctx):
                     #   accumulated_performance
                     decorator = result.get("decorator", {})
                     signature_performance_list.append(decorator.get(
-                        "accumulated_signature_performance", {}).get("elapsed real time", [])[0])
+                        "accumulated_signature_performance", [])[0])
                     distance_performance_list.append(decorator.get(
-                        "accumulated_distance_performance", {}).get("elapsed real time", [])[0])
+                        "accumulated_distance_performance", [])[0])
                     performance_list.append(decorator.get(
-                        "accumulated_performance", {}).get("elapsed real time", [])[0])
+                        "accumulated_performance", [])[0])
                     data = decorator.get("data", {})
                     tree_node_count_list.append(data.get("monitoring", {}).get("original", [])[0][0])
                     tree_identity_count_list.append(data.get("monitoring", {}).get("converted", [])[0][0])
