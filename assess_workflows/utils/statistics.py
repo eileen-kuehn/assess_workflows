@@ -2,6 +2,10 @@ from __future__ import division
 import math
 
 
+def mean(values):
+    return sum(values)/len(values)
+
+
 def standard_deviation(values):
     """
     corrected standard variation for samples
