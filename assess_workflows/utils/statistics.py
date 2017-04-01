@@ -13,7 +13,10 @@ def standard_deviation(values):
     :param values:
     :return:
     """
-    return math.sqrt(sum(_distances_to_mean(values)) / (len(values) - 1))
+    try:
+        return math.sqrt(sum(_distances_to_mean(values)) / (len(values) - 1))
+    except ZeroDivisionError:
+        return values[0]
 
 
 def population_standard_deviation(values):
