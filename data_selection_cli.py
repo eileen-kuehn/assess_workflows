@@ -466,8 +466,9 @@ def pick_samples(ctx, seed, repeat, count, minimum, skip_key):
 
 
 @click.command()
+@click.option("--skip_key", "skip_key", default=False, type=bool)
 @click.pass_context
-def aggregate_samples(ctx):
+def aggregate_samples(ctx, skip_key):
     """
     Method aggregates nested dictionaries into a flat one. If it already is a flat dictionary,
     than data is kept and written.
@@ -485,26 +486,29 @@ def aggregate_samples(ctx):
             input_data = json.load(input_file).get("data", None)
 
             for key, values in input_data.items():
-                try:
-                    if len(values[0]) > 1:
-                        # flattening data
-                        results.setdefault(key, []).append(
-                            [element for value in values[0] for element in value])
-                    else:
-                        # data can be kept
-                        results.setdefault(key, []).append(values[0])
-                except KeyError:
-                    to_check = [values]
-                    while to_check:
-                        current_item = to_check.pop(0)
-                        try:
-                            while current_item:
-                                _, value = current_item.popitem()
-                                to_check.append(value)
-                        except KeyError:
-                            results.setdefault(key, []).append(current_item)
-                        except AttributeError:
-                            results.setdefault(key, []).extend(current_item)
+                if isinstance(values, list):
+                    results.setdefault(key if not skip_key else "samples", []).extend(values)
+                else:
+                    try:
+                        if len(values[0]) > 1:
+                            # flattening data
+                            results.setdefault(key, []).append(
+                                [element for value in values[0] for element in value])
+                        else:
+                            # data can be kept
+                            results.setdefault(key, []).append(values[0])
+                    except KeyError:
+                        to_check = [values]
+                        while to_check:
+                            current_item = to_check.pop(0)
+                            try:
+                                while current_item:
+                                    _, value = current_item.popitem()
+                                    to_check.append(value)
+                            except KeyError:
+                                results.setdefault(key, []).append(current_item)
+                            except AttributeError:
+                                results.setdefault(key, []).extend(current_item)
 
     output_results(
         ctx=ctx,
