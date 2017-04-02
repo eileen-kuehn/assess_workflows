@@ -1516,6 +1516,150 @@ def analyse_full_statistics(ctx, keys):
 
 
 @click.command()
+@click.option("--inputs", "inputs", multiple=True, type=int)
+@click.pass_context
+def analyse_correlation(ctx, inputs):
+    """
+    Attention: this method handles data very statically and assumes three input files. The first
+    three are assumed to contain perturbated data from insertion and deletion while the latter three
+    are expected to contain move perturbation only.
+
+    :param ctx:
+    :param inputs:
+    :return:
+    """
+    structure = ctx.obj.get("structure", None)
+    perturbation_type_list = []
+    file_list = []
+    probability_list = []
+    sted_cost_list = []
+    shted_cost_list = []
+    fted_cost_list = []
+    ted_cost_list = []
+    measured_cost_list = []
+    algorithm_list = []
+    signature_list = []
+    node_count_list = []
+    identity_count_list = []
+    perturbated_node_count_list = []
+    perturbated_identity_count_list = []
+    for file_index, input in enumerate(inputs):
+        file_path = structure.intermediate_file_path(step=input)
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            files = analysis_data.get("files", [])
+            distances = analysis_data.get("distance", [])
+            results = analysis_data.get("results", [])
+            probabilities = analysis_data.get("prototypes", [])
+            for index, result in enumerate(results):
+                # each result contains a different distance
+                for distance_result in result:
+                    signature = distance_result.get("signature")
+                    if "EnsembleSignature (ParentChildByNameTopologySignature, ParentSiblingSignature (width: 2), PQOrderSignature (q=2), PQGramSignature (p=2, q=2))" in signature:
+                        signature = ["ParentChildByNameTopologySignature",
+                                     "ParentSiblingSignature (width: 2)",
+                                     "PQOrderSignature (q=2)",
+                                     "PQGramSignature (p=2, q=2)"]
+                    else:
+                        logging.info("handling signature as a whole (%s)" % signature)
+                    algorithm = distance_result.get("algorithm")
+                    algorithm = algorithm.replace("'ProcessExitEvent', 'ProcessStartEvent'", "'ProcessStartEvent', 'ProcessExitEvent'")
+                    decorator = distance_result.get("decorator", {})
+                    data_decorator = decorator.get("data", {})
+                    for matrix in decorator.get("matrix", []):
+                        for matrix_index, matrix_result in enumerate(matrix):
+                            # matrix_index carries information about signature
+                            # matrix_result is list of distances for prototypes
+                            for prototype_index, matrix_entry in enumerate(matrix_result):
+                                # matrix_entry_index refers to index of prototype
+                                # matrix_entry is current distance value
+                                file_list.append(files[index])
+                                probability_list.append(float(probabilities[index][prototype_index]))
+                                sted_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCost")[prototype_index])
+                                shted_cost_list.append(distances[index].get("SubtreeHeightWeightedTreeEditDistanceCost")[prototype_index])
+                                fted_cost_list.append(distances[index].get("FanoutWeightedTreeEditDistanceCost")[prototype_index])
+                                ted_cost_list.append(distances[index].get("TreeEditDistanceCost")[prototype_index])
+                                signature_list.append(signature[matrix_index])
+                                measured_cost_list.append(matrix_entry)
+                                algorithm_list.append(algorithm)
+                                node_count_list.append(data_decorator.get("monitoring").get("original")[0][0])
+                                identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][matrix_index])
+                                perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[matrix_index][prototype_index])
+                                perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[matrix_index][prototype_index])
+                                perturbation_type_list.append("insert_delete" if file_index < 3 else "move")
+                    for ensemble in decorator.get("ensembles", []):
+                        for prototype_index, ensemble_value in enumerate(ensemble):
+                            file_list.append(files[index])
+                            probability_list.append(float(probabilities[index][prototype_index]))
+                            sted_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCost")[prototype_index])
+                            shted_cost_list.append(distances[index].get("SubtreeHeightWeightedTreeEditDistanceCost")[prototype_index])
+                            fted_cost_list.append(distances[index].get("FanoutWeightedTreeEditDistanceCost")[prototype_index])
+                            ted_cost_list.append(distances[index].get("TreeEditDistanceCost")[prototype_index])
+                            signature_list.append(signature)
+                            measured_cost_list.append(ensemble_value)
+                            algorithm_list.append(algorithm)
+                            node_count_list.append(data_decorator.get("monitoring").get("original")[0][0])
+                            identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][0])
+                            perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[0][prototype_index])
+                            perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[0][prototype_index])
+                            perturbation_type_list.append("insert_delete" if file_index < 3 else "move")
+
+    if ctx.obj.get("save", False):
+        from rpy2.robjects.packages import importr
+        from rpy2 import robjects
+
+        base = importr("base")
+        datatable = importr("data.table")
+        result_dt = datatable.data_table(algorithm=base.unlist(algorithm_list),
+                                         signature=base.unlist(signature_list),
+                                         perturbation_type=base.unlist(perturbation_type_list),
+                                         file=base.unlist(file_list),
+                                         probability=base.unlist(probability_list),
+                                         sted=base.unlist(sted_cost_list),
+                                         shted=base.unlist(shted_cost_list),
+                                         fted=base.unlist(fted_cost_list),
+                                         ted=base.unlist(ted_cost_list),
+                                         distance=base.unlist(measured_cost_list),
+                                         node_count=base.unlist(node_count_list),
+                                         identity_count=base.unlist(identity_count_list),
+                                         perturbated_node_count=base.unlist(perturbated_node_count_list),
+                                         perturbated_identity_count=base.unlist(perturbated_identity_count_list))
+        robjects.r("""
+        calculate_correlation <- function(dt, sig, type, algo) {
+            tmp <- dt[signature==sig & perturbation_type==type & algorithm==algo,]
+            list("ted"=cor(tmp$distance, tmp$ted), "fted"=cor(tmp$distance, tmp$fted), "sted"=cor(tmp$distance, tmp$sted), "shted"=cor(tmp$distance, tmp$shted))
+        }
+        """)
+        tex_result = ""
+        calculate_correlation = robjects.r["calculate_correlation"]
+        for signature, signature_key in [("ParentChildByNameTopologySignature", "parent",),
+                                         ("ParentSiblingSignature (width: 2)", "sibling",),
+                                         ("PQOrderSignature (q=2)", "pqorder",),
+                                         ("PQGramSignature (p=2, q=2)", "pqgram",),
+                                         ("EnsembleSignature (ParentSiblingSignature (width: 2), PQOrderSignature (q=2))", "ensemblenoise",),
+                                         ("EnsembleSignature (ParentChildByNameTopologySignature, PQGramSignature (p=2, q=0))", "ensembleparent",)]:
+            for algorithm, algorithm_key in [("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])", "simple",),
+                                             ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])", "start",),
+                                             ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartExitDistance (weight=0.5), supported=['ProcessStartEvent', 'ProcessExitEvent'])", "startexit",)]:
+                for type, type_key in [("insert_delete", "insertdelete",), ("move", "move",)]:
+                    result = calculate_correlation(result_dt, signature, type, algorithm)
+                    for key, value in result.items():
+                        tex_result += "\def\cor%s%s%s%s{%s}\n" % (key, signature_key, algorithm_key, type_key, value[0])
+        rdata_filename = structure.intermediate_file_path(file_type="RData")
+        output_r_data(
+            ctx=ctx, filename=rdata_filename, result_dt=result_dt
+        )
+        output_results(
+            ctx=ctx,
+            results=tex_result,
+            version=determine_version(os.path.dirname(assess_workflows.__file__)),
+            source="%s (%s)" % (__file__, "analyse_correlation"),
+            file_type="tex",
+            comment_sign="%"
+        )
+
+@click.command()
 @click.option("--prefix", "prefix", default="", type=str)
 @click.pass_context
 def analyse_performance(ctx, prefix):
@@ -1776,6 +1920,7 @@ cli.add_command(create_histogram)
 cli.add_command(analyse_full_statistics)
 cli.add_command(analyse_ensemble)
 cli.add_command(analyse_performance)
+cli.add_command(analyse_correlation)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
