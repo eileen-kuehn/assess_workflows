@@ -1642,7 +1642,7 @@ def analyse_correlation(ctx, inputs):
                                          ("ParentSiblingSignature (width: 2)", "sibling",),
                                          ("PQOrderSignature (q=2)", "pqorder",),
                                          ("PQGramSignature (p=1, q=2)", "pqgram"),
-                                         ("PQGramSignature (p=2, q=2)", "pqgram2",),
+                                         ("PQGramSignature (p=2, q=2)", "pqgramtwo",),
                                          ("EnsembleSignature (ParentSiblingSignature (width: 2), PQOrderSignature (q=2))", "ensemblenoise",),
                                          ("EnsembleSignature (ParentChildByNameTopologySignature, PQGramSignature (p=2, q=0))", "ensembleparent",)]:
             for algorithm, algorithm_key in [("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])", "simple",),
