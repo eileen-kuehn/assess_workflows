@@ -1556,10 +1556,11 @@ def analyse_correlation(ctx, inputs):
                 # each result contains a different distance
                 for distance_result in result:
                     signature = distance_result.get("signature")
-                    if "EnsembleSignature (ParentChildByNameTopologySignature, ParentSiblingSignature (width: 2), PQOrderSignature (q=2), PQGramSignature (p=2, q=2))" in signature:
+                    if "EnsembleSignature (ParentChildByNameTopologySignature, ParentSiblingSignature (width: 2), PQOrderSignature (q=2), PQGramSignature (p=1, q=2), PQGramSignature (p=2, q=2))" in signature:
                         signature = ["ParentChildByNameTopologySignature",
                                      "ParentSiblingSignature (width: 2)",
                                      "PQOrderSignature (q=2)",
+                                     "PQGramSignature (p=1, q=2)",
                                      "PQGramSignature (p=2, q=2)"]
                     else:
                         logging.info("handling signature as a whole (%s)" % signature)
@@ -1636,12 +1637,12 @@ def analyse_correlation(ctx, inputs):
         for signature, signature_key in [("ParentChildByNameTopologySignature", "parent",),
                                          ("ParentSiblingSignature (width: 2)", "sibling",),
                                          ("PQOrderSignature (q=2)", "pqorder",),
-                                         ("PQGramSignature (p=2, q=2)", "pqgram",),
+                                         ("PQGramSignature (p=1, q=2)", "pqgram"),
+                                         ("PQGramSignature (p=2, q=2)", "pqgram2",),
                                          ("EnsembleSignature (ParentSiblingSignature (width: 2), PQOrderSignature (q=2))", "ensemblenoise",),
                                          ("EnsembleSignature (ParentChildByNameTopologySignature, PQGramSignature (p=2, q=0))", "ensembleparent",)]:
             for algorithm, algorithm_key in [("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])", "simple",),
-                                             ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])", "start",),
-                                             ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartExitDistance (weight=0.5), supported=['ProcessStartEvent', 'ProcessExitEvent'])", "startexit",)]:
+                                             ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])", "start",)]:
                 for type, type_key in [("insert_delete", "insertdelete",), ("move", "move",)]:
                     result = calculate_correlation(result_dt, signature, type, algorithm)
                     for key, value in result.items():
