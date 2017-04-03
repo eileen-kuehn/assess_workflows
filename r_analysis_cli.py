@@ -1534,6 +1534,7 @@ def analyse_correlation(ctx, inputs):
     probability_list = []
     sted_cost_list = []
     shted_cost_list = []
+    sted_wm_cost_list = []
     fted_cost_list = []
     ted_cost_list = []
     measured_cost_list = []
@@ -1578,6 +1579,7 @@ def analyse_correlation(ctx, inputs):
                                 file_list.append(files[index])
                                 probability_list.append(float(probabilities[index][prototype_index]))
                                 sted_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCost")[prototype_index])
+                                sted_wm_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCostWithMove")[prototype_index])
                                 shted_cost_list.append(distances[index].get("SubtreeHeightWeightedTreeEditDistanceCost")[prototype_index])
                                 fted_cost_list.append(distances[index].get("FanoutWeightedTreeEditDistanceCost")[prototype_index])
                                 ted_cost_list.append(distances[index].get("TreeEditDistanceCost")[prototype_index])
@@ -1594,6 +1596,7 @@ def analyse_correlation(ctx, inputs):
                             file_list.append(files[index])
                             probability_list.append(float(probabilities[index][prototype_index]))
                             sted_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCost")[prototype_index])
+                            sted_wm_cost_list.append(distances[index].get("SubtreeWeightedTreeEditDistanceCostWithMove")[prototype_index])
                             shted_cost_list.append(distances[index].get("SubtreeHeightWeightedTreeEditDistanceCost")[prototype_index])
                             fted_cost_list.append(distances[index].get("FanoutWeightedTreeEditDistanceCost")[prototype_index])
                             ted_cost_list.append(distances[index].get("TreeEditDistanceCost")[prototype_index])
@@ -1618,6 +1621,7 @@ def analyse_correlation(ctx, inputs):
                                          file=base.unlist(file_list),
                                          probability=base.unlist(probability_list),
                                          sted=base.unlist(sted_cost_list),
+                                         stedwm=base.unlist(sted_wm_cost_list),
                                          shted=base.unlist(shted_cost_list),
                                          fted=base.unlist(fted_cost_list),
                                          ted=base.unlist(ted_cost_list),
@@ -1629,7 +1633,7 @@ def analyse_correlation(ctx, inputs):
         robjects.r("""
         calculate_correlation <- function(dt, sig, type, algo) {
             tmp <- dt[signature==sig & perturbation_type==type & algorithm==algo,]
-            list("ted"=cor(tmp$distance, tmp$ted), "fted"=cor(tmp$distance, tmp$fted), "sted"=cor(tmp$distance, tmp$sted), "shted"=cor(tmp$distance, tmp$shted))
+            list("ted"=cor(tmp$distance, tmp$ted), "fted"=cor(tmp$distance, tmp$fted), "sted"=cor(tmp$distance, tmp$sted), "stedwm"=cor(tmp$distance, tmp$stedwm), "shted"=cor(tmp$distance, tmp$shted))
         }
         """)
         tex_result = ""
