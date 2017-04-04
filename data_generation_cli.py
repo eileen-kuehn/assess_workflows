@@ -16,6 +16,7 @@ from utility.report import LVL
 from treedistancegenerator.ted_generator import TEDGenerator
 from treedistancegenerator.costs.costs import *
 from treedistancegenerator.operations.random_operation import RandomOperation
+from treedistancegenerator.filter.node_filter import skip_leaf, skip_inner_node, skip_no_node
 
 from assess_workflows.generic.structure import Structure
 
@@ -44,6 +45,8 @@ def _generate_perturbated_tree(kwargs):
     :param delete_probability: Probability to delete item
     :param change_probability: Probability to change item
     :param move_probability: Probability to move item
+    :param leaf_nodes_only: Only include leaf nodes?
+    :param internal_nodes_only: Only include internal nodes?
     :param cost: True or False
     :return:
     """
@@ -55,6 +58,8 @@ def _generate_perturbated_tree(kwargs):
     delete_probability = kwargs.get("delete_probability", 0)
     change_probability = kwargs.get("change_probability", 0)
     move_probability = kwargs.get("move_probability", 0)
+    leaf_nodes_only = kwargs.get("leaf_nodes_only", False)
+    internal_nodes_only = kwargs.get("internal_nodes_only", False)
     cost = kwargs.get("cost", True)
 
     tree_builder = CSVTreeBuilder()
@@ -73,7 +78,9 @@ def _generate_perturbated_tree(kwargs):
                                                                              delete_probability=delete_probability,
                                                                              edit_probability=change_probability,
                                                                              move_probability=move_probability),
-                                         probability=probability)
+                                         probability=probability,
+                                         skip_node=skip_leaf if internal_nodes_only else (
+                                             skip_inner_node if leaf_nodes_only else skip_no_node))
             for _ in xrange(repeat):
                 perturbated_tree = ted_generator.generate(tree)
                 result[filepath]["perturbated_tree"].setdefault(probability, []).append(perturbated_tree)
@@ -90,9 +97,12 @@ def _generate_perturbated_tree(kwargs):
 @click.option("--change_probability", "change_probability", type=float, default=0)
 @click.option("--move_probability", "move_probability", type=float, default=0)
 @click.option("--cost", "cost", default=True, type=bool)
+@click.option("--leaf_nodes_only", "leaf_nodes_only", default=False, type=bool)
+@click.option("--internal_nodes_only", "internal_nodes_only", default=False, type=bool)
 @click.pass_context
 def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probability, cost,
-                              delete_probability, change_probability, move_probability, pcount):
+                              delete_probability, change_probability, move_probability, pcount,
+                              leaf_nodes_only, internal_nodes_only):
     if seed is not None:
         random.seed(seed)
     results = MulticoreResult()
@@ -110,6 +120,8 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probabili
                     "delete_probability": delete_probability,
                     "change_probability": change_probability,
                     "move_probability": move_probability,
+                    "leaf_nodes_only": leaf_nodes_only,
+                    "internal_nodes_only": internal_nodes_only,
                     "cost": cost
                 } for sample in samples for item in sample]
                 multicore_results = do_multicore(
@@ -130,6 +142,8 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probabili
                             "delete_probability": delete_probability,
                             "change_probability": change_probability,
                             "move_probability": move_probability,
+                            "leaf_nodes_only": leaf_nodes_only,
+                            "internal_nodes_only": internal_nodes_only,
                             "cost": cost
                         })
         if ctx.obj.get("save"):
