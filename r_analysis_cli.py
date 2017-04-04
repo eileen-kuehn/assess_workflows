@@ -1518,6 +1518,72 @@ def analyse_full_statistics(ctx, keys):
 @click.command()
 @click.option("--inputs", "inputs", multiple=True, type=int)
 @click.pass_context
+def analyse_sensitivity(ctx, inputs):
+    structure = ctx.obj.get("structure", None)
+    perturbation_type_list = []
+    probability_list = []
+    measured_cost_list = []
+    algorithm_list = []
+    signature_list = []
+    node_count_list = []
+    identity_count_list = []
+    perturbated_node_count_list = []
+    perturbated_identity_count_list = []
+    for file_index, input in enumerate(inputs):
+        file_path = structure.intermediate_file_path(step=input)
+
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            distances = analysis_data.get("distance", [])
+            results = analysis_data.get("results", [])
+            probabilities = analysis_data.get("prototypes", [])
+            for index, result in enumerate(results):
+                # each result contains a different distance
+                for distance_result in result:
+                    signature = distance_result.get("signature")
+                    algorithm = distance_result.get("algorithm")
+                    algorithm = algorithm.replace("'ProcessExitEvent', 'ProcessStartEvent'", "'ProcessStartEvent', 'ProcessExitEvent'")
+                    decorator = distance_result.get("decorator", {})
+                    data_decorator = decorator.get("data", {})
+                    if file_index < 3:
+                        perturbation_type = "insert_delete_leaf"
+                    else:
+                        perturbation_type = "insert_delete"
+                    for ensemble in decorator.get("ensembles", []):
+                        for prototype_index, ensemble_value in enumerate(ensemble):
+                            probability_list.append(float(probabilities[index][prototype_index]))
+                            signature_list.append(signature)
+                            measured_cost_list.append(ensemble_value)
+                            algorithm_list.append(algorithm)
+                            node_count_list.append(data_decorator.get("monitoring").get("original")[0][0])
+                            identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][0])
+                            perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[0][prototype_index])
+                            perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[0][prototype_index])
+                            perturbation_type_list.append(perturbation_type)
+    if ctx.obj.get("save", False):
+        from rpy2.robjects.packages import importr
+        from rpy2 import robjects
+
+        base = importr("base")
+        datatable = importr("data.table")
+        result_dt = datatable.data_table(algorithm=base.unlist(algorithm_list),
+                                         signature=base.unlist(signature_list),
+                                         perturbation_type=base.unlist(perturbation_type_list),
+                                         probability=base.unlist(probability_list),
+                                         distance=base.unlist(measured_cost_list),
+                                         node_count=base.unlist(node_count_list),
+                                         identity_count=base.unlist(identity_count_list),
+                                         perturbated_node_count=base.unlist(perturbated_node_count_list),
+                                         perturbated_identity_count=base.unlist(perturbated_identity_count_list))
+        rdata_filename = structure.intermediate_file_path(file_type="RData")
+        output_r_data(
+            ctx=ctx, filename=rdata_filename, result_dt=result_dt
+        )
+
+
+@click.command()
+@click.option("--inputs", "inputs", multiple=True, type=int)
+@click.pass_context
 def analyse_correlation(ctx, inputs):
     """
     Attention: this method handles data very statically and assumes three input files. The first
@@ -1934,6 +2000,7 @@ cli.add_command(analyse_full_statistics)
 cli.add_command(analyse_ensemble)
 cli.add_command(analyse_performance)
 cli.add_command(analyse_correlation)
+cli.add_command(analyse_sensitivity)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)
