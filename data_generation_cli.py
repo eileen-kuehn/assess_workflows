@@ -16,7 +16,8 @@ from utility.report import LVL
 from treedistancegenerator.ted_generator import TEDGenerator
 from treedistancegenerator.costs.costs import *
 from treedistancegenerator.operations.random_operation import RandomOperation
-from treedistancegenerator.filter.node_filter import skip_leaf, skip_inner_node, skip_no_node
+from treedistancegenerator.filter.node_filter import skip_leaf, skip_inner_node, skip_no_node, \
+    skip_all_but_attribute_nodes
 
 from assess_workflows.generic.structure import Structure
 
@@ -47,6 +48,7 @@ def _generate_perturbated_tree(kwargs):
     :param move_probability: Probability to move item
     :param leaf_nodes_only: Only include leaf nodes?
     :param internal_nodes_only: Only include internal nodes?
+    :param attribute_nodes_only: Only include attribute nodes?
     :param cost: True or False
     :return:
     """
@@ -60,6 +62,7 @@ def _generate_perturbated_tree(kwargs):
     move_probability = kwargs.get("move_probability", 0)
     leaf_nodes_only = kwargs.get("leaf_nodes_only", False)
     internal_nodes_only = kwargs.get("internal_nodes_only", False)
+    attribute_nodes_only = kwargs.get("attribute_nodes_only", False)
     cost = kwargs.get("cost", True)
 
     tree_builder = CSVTreeBuilder()
@@ -80,7 +83,8 @@ def _generate_perturbated_tree(kwargs):
                                                                              move_probability=move_probability),
                                          probability=probability,
                                          skip_node=skip_leaf if internal_nodes_only else (
-                                             skip_inner_node if leaf_nodes_only else skip_no_node))
+                                             skip_inner_node if leaf_nodes_only else (
+                                                 skip_all_but_attribute_nodes if attribute_nodes_only else skip_no_node)))
             for _ in xrange(repeat):
                 perturbated_tree = ted_generator.generate(tree)
                 result[filepath]["perturbated_tree"].setdefault(probability, []).append(perturbated_tree)
@@ -99,10 +103,11 @@ def _generate_perturbated_tree(kwargs):
 @click.option("--cost", "cost", default=True, type=bool)
 @click.option("--leaf_nodes_only", "leaf_nodes_only", default=False, type=bool)
 @click.option("--internal_nodes_only", "internal_nodes_only", default=False, type=bool)
+@click.option("--attribute_nodes_only", "attribute_nodes_only", default=False, type=bool)
 @click.pass_context
 def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probability, cost,
                               delete_probability, change_probability, move_probability, pcount,
-                              leaf_nodes_only, internal_nodes_only):
+                              leaf_nodes_only, internal_nodes_only, attribute_nodes_only):
     if seed is not None:
         random.seed(seed)
     results = MulticoreResult()
@@ -122,6 +127,7 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probabili
                     "move_probability": move_probability,
                     "leaf_nodes_only": leaf_nodes_only,
                     "internal_nodes_only": internal_nodes_only,
+                    "attribute_nodes_only": attribute_nodes_only,
                     "cost": cost
                 } for sample in samples for item in sample]
                 multicore_results = do_multicore(
@@ -144,6 +150,7 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probabili
                             "move_probability": move_probability,
                             "leaf_nodes_only": leaf_nodes_only,
                             "internal_nodes_only": internal_nodes_only,
+                            "attribute_nodes_only": attribute_nodes_only,
                             "cost": cost
                         })
         if ctx.obj.get("save"):
