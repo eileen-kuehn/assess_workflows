@@ -1521,6 +1521,7 @@ def analyse_full_statistics(ctx, keys):
 def analyse_sensitivity(ctx, inputs):
     structure = ctx.obj.get("structure", None)
     perturbation_type_list = []
+    dataset_type_list = []
     probability_list = []
     measured_cost_list = []
     algorithm_list = []
@@ -1547,8 +1548,13 @@ def analyse_sensitivity(ctx, inputs):
                     data_decorator = decorator.get("data", {})
                     if file_index < 3:
                         perturbation_type = "insert_delete_leaf"
-                    else:
+                        dataset_type = "structure"
+                    elif file_index < 6:
                         perturbation_type = "insert_delete"
+                        dataset_type = "structure"
+                    else:
+                        perturbation_type = "delete"
+                        dataset_type = "attribute"
                     for ensemble in decorator.get("normalized_ensembles", []):
                         for prototype_index, ensemble_value in enumerate(ensemble):
                             probability_list.append(float(probabilities[index][prototype_index]))
@@ -1560,6 +1566,7 @@ def analyse_sensitivity(ctx, inputs):
                             perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[0][prototype_index])
                             perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[0][prototype_index])
                             perturbation_type_list.append(perturbation_type)
+                            dataset_type_list.append(dataset_type)
     if ctx.obj.get("save", False):
         from rpy2.robjects.packages import importr
         from rpy2 import robjects
@@ -1571,6 +1578,7 @@ def analyse_sensitivity(ctx, inputs):
         result_dt = datatable.data_table(algorithm=base.unlist(algorithm_list),
                                          signature=base.unlist(signature_list),
                                          perturbation_type=base.unlist(perturbation_type_list),
+                                         dataset_type=base.unlist(dataset_type_list),
                                          probability=base.unlist(probability_list),
                                          distance=base.unlist(measured_cost_list),
                                          node_count=base.unlist(node_count_list),
@@ -1580,36 +1588,54 @@ def analyse_sensitivity(ctx, inputs):
         robjects.r("""
         summarize_dt <- function(dt) {
             require(data.table)
-            dt[,.(mean_distance=mean(distance), stderror_distance=sd(distance)/sqrt(length(distance))), by=list(algorithm, signature, perturbation_type, probability)]
+            dt[,.(mean_distance=mean(distance), stderror_distance=sd(distance)/sqrt(length(distance))),
+                by=list(algorithm, signature, perturbation_type, dataset_type, probability)]
         }
         """)
         summarize_dt = robjects.r["summarize_dt"]
         robjects.r("""
-        subset_dt <- function(dt, algorithm_key) {
-            dt[algorithm==algorithm_key,]
+        subset_algorithm <- function(dt, algorithm_key) {
+            dt[algorithm==algorithm_key & data_type=="structure",]
         }
         """)
-        subset_dt = robjects.r["subset_dt"]
+        subset_algorithm = robjects.r["subset_algorithm"]
+        robjects.r("""
+        subset_attribute <- function(dt) {
+            dt[dataset_type=="attribute",]
+        }
+        """)
+        subset_attribute = robjects.r["subset_attribute"]
         def create_plot(data, algorithm_key):
-            return ggplot2.ggplot(subset_dt(data, algorithm_key)) + ggplot2.aes_string(
-                x="probability", y="mean_distance") + ggplot2.geom_point(
-                ggplot2.aes_string(colour="signature")) + ggplot2.geom_errorbar(
-                ggplot2.aes_string(ymax="mean_distance+stderror_distance", ymin="mean_distance-stderror_distance")) + ggplot2.facet_wrap(robjects.Formula("~perturbation_type"))
+            return ggplot2.ggplot(subset_algorithm(data, algorithm_key)) + ggplot2.aes_string(
+                x="probability", y="mean_distance", colour="signature") + ggplot2.geom_point() + \
+                   ggplot2.geom_errorbar(ggplot2.aes_string(
+                       ymax="mean_distance+stderror_distance",
+                       ymin="mean_distance-stderror_distance")) + \
+                   ggplot2.facet_wrap(robjects.Formula("~perturbation_type"))
         summarized_dt = summarize_dt(result_dt)
         simple_distance_plot = create_plot(summarized_dt, "IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])")
         simple_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "simple")
         start_distance_plot = create_plot(summarized_dt, "IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])")
         start_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "start")
+        attribute_distance_plot = ggplot2.ggplot(subset_attribute(summarized_dt)) + ggplot2.aes_string(
+            x="probability", y="mean_distance", colour="signature") + ggplot2.geom_point() + \
+            ggplot2.geom_errorbar(ggplot2.aes_string(ymax="mean_distanct+stderror_distance",
+                                                     ymin="mean_distance-stderror_distance")) + \
+                                  ggplot2.facet_wrap(robjects.Formula("~algorithm"))
+        attribute_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "attribute")
 
         _do_the_plotting([(simple_distance_plot, simple_distance_plot_filename,),
-                          (start_distance_plot, start_distance_plot_filename,)])
+                          (start_distance_plot, start_distance_plot_filename,),
+                          (attribute_distance_plot, attribute_distance_plot_filename)])
 
         rdata_filename = structure.intermediate_file_path(file_type="RData")
         output_r_data(
             ctx=ctx, filename=rdata_filename, result_dt=result_dt, summarized_dt=summarized_dt,
             simple_distance_plot=simple_distance_plot, start_distance_plot=start_distance_plot,
             simple_distance_plot_filename=simple_distance_plot_filename,
-            start_distance_plot_filename=start_distance_plot_filename
+            start_distance_plot_filename=start_distance_plot_filename,
+            attribute_distance_plot=attribute_distance_plot,
+            attribute_distance_plot_filename=attribute_distance_plot_filename
         )
 
 
