@@ -1569,6 +1569,12 @@ def analyse_correlation(ctx, inputs):
                     algorithm = algorithm.replace("'ProcessExitEvent', 'ProcessStartEvent'", "'ProcessStartEvent', 'ProcessExitEvent'")
                     decorator = distance_result.get("decorator", {})
                     data_decorator = decorator.get("data", {})
+                    if file_index < 3:
+                        perturbation_type = "insert_delete"
+                    elif file_index < 6:
+                        perturbation_type = "move"
+                    else:
+                        perturbation_type = "insert_delete_move"
                     for matrix in decorator.get("matrix", []):
                         for matrix_index, matrix_result in enumerate(matrix):
                             # matrix_index carries information about signature
@@ -1590,7 +1596,7 @@ def analyse_correlation(ctx, inputs):
                                 identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][matrix_index])
                                 perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[matrix_index][prototype_index])
                                 perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[matrix_index][prototype_index])
-                                perturbation_type_list.append("insert_delete" if file_index < 3 else "move")
+                                perturbation_type_list.append(perturbation_type)
                     for ensemble in decorator.get("ensembles", []):
                         for prototype_index, ensemble_value in enumerate(ensemble):
                             file_list.append(files[index])
@@ -1607,12 +1613,7 @@ def analyse_correlation(ctx, inputs):
                             identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][0])
                             perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[0][prototype_index])
                             perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[0][prototype_index])
-                            if file_index < 3:
-                                perturbation_type_list.append("insert_delete")
-                            elif file_index < 6:
-                                perturbation_type_list.append("move")
-                            else:
-                                perturbation_type_list.append("insert_delete_move")
+                            perturbation_type_list.append(perturbation_type)
 
     if ctx.obj.get("save", False):
         from rpy2.robjects.packages import importr
