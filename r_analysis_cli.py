@@ -1549,7 +1549,7 @@ def analyse_sensitivity(ctx, inputs):
                         perturbation_type = "insert_delete_leaf"
                     else:
                         perturbation_type = "insert_delete"
-                    for ensemble in decorator.get("ensembles", []):
+                    for ensemble in decorator.get("normalized_ensembles", []):
                         for prototype_index, ensemble_value in enumerate(ensemble):
                             probability_list.append(float(probabilities[index][prototype_index]))
                             signature_list.append(signature)
@@ -1563,6 +1563,8 @@ def analyse_sensitivity(ctx, inputs):
     if ctx.obj.get("save", False):
         from rpy2.robjects.packages import importr
         from rpy2 import robjects
+        from rpy2.robjects.lib.dplyr import DataFrame
+        from rpy2.robjects.lib.ggplot2 import ggplot2
 
         base = importr("base")
         datatable = importr("data.table")
@@ -1575,9 +1577,39 @@ def analyse_sensitivity(ctx, inputs):
                                          identity_count=base.unlist(identity_count_list),
                                          perturbated_node_count=base.unlist(perturbated_node_count_list),
                                          perturbated_identity_count=base.unlist(perturbated_identity_count_list))
+        robjects.r("""
+        summarize_dt <- function(dt) {
+            require(data.table)
+            dt[,.(mean_distance=mean(distance), stderror_distance=sd(distance)/sqrt(length(distance))), by=list(algorithm, signature, perturbation_type, probability)]
+        }
+        """)
+        summarize_dt = robjects.r["summarize_dt"]
+        robjects.r("""
+        subset_dt <- function(dt, algorithm_key) {
+            dt[algorithm==algorithm_key,]
+        }
+        """)
+        subset_dt = robjects.r["subset_dt"]
+        def create_plot(data, algorithm_key):
+            return ggplot2.ggplot(subset_dt(data, algorithm_key)) + ggplot2.aes_string(
+                x="probability", y="mean_distance") + ggplot2.geom_point(
+                ggplot2.aes_string(colour="signature")) + ggplot2.geom_errorbar(
+                ggplot2.aes_string(ymax="mean_distance+stderror_distance", ymin="mean_distance-stderror_distance")) + ggplot2.facet_wrap(robjects.Formula("~perturbation_type"))
+        summarized_dt = summarize_dt(result_dt)
+        simple_distance_plot = create_plot(summarized_dt, "IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])")
+        simple_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "simple")
+        start_distance_plot = create_plot(summarized_dt, "IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])")
+        start_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "start")
+
+        _do_the_plotting([(simple_distance_plot, simple_distance_plot_filename,),
+                          (start_distance_plot, start_distance_plot_filename,)])
+
         rdata_filename = structure.intermediate_file_path(file_type="RData")
         output_r_data(
-            ctx=ctx, filename=rdata_filename, result_dt=result_dt
+            ctx=ctx, filename=rdata_filename, result_dt=result_dt, summarized_dt=summarized_dt,
+            simple_distance_plot=simple_distance_plot, start_distance_plot=start_distance_plot,
+            simple_distance_plot_filename=simple_distance_plot_filename,
+            start_distance_plot_filename=start_distance_plot_filename
         )
 
 
