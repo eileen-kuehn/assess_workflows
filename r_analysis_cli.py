@@ -1607,7 +1607,12 @@ def analyse_correlation(ctx, inputs):
                             identity_count_list.append(data_decorator.get("monitoring").get("converted")[0][0])
                             perturbated_node_count_list.append(data_decorator.get("prototypes").get("original")[0][prototype_index])
                             perturbated_identity_count_list.append(data_decorator.get("prototypes").get("converted")[0][prototype_index])
-                            perturbation_type_list.append("insert_delete" if file_index < 3 else "move")
+                            if file_index < 3:
+                                perturbation_type_list.append("insert_delete")
+                            elif file_index < 6:
+                                perturbation_type_list.append("move")
+                            else:
+                                perturbation_type_list.append("insert_delete_move")
 
     if ctx.obj.get("save", False):
         from rpy2.robjects.packages import importr
@@ -1647,7 +1652,9 @@ def analyse_correlation(ctx, inputs):
                                          ("EnsembleSignature (ParentChildByNameTopologySignature, PQGramSignature (p=2, q=0))", "ensembleparent",)]:
             for algorithm, algorithm_key in [("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=SimpleDistance, supported=['ProcessStartEvent', 'ProcessExitEvent'])", "simple",),
                                              ("IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartDistance, supported=['ProcessStartEvent'])", "start",)]:
-                for type, type_key in [("insert_delete", "insertdelete",), ("move", "move",)]:
+                for type, type_key in [("insert_delete", "insertdelete",),
+                                       ("move", "move",),
+                                       ("insert_delete_move", "insertdeletemove",)]:
                     result = calculate_correlation(result_dt, signature, type, algorithm)
                     for key, value in result.items():
                         tex_result += "\def\cor%s%s%s%s{%s}\n" % (key, signature_key, algorithm_key, type_key, value[0])
