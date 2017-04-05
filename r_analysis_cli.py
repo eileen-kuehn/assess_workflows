@@ -1595,7 +1595,7 @@ def analyse_sensitivity(ctx, inputs):
         summarize_dt = robjects.r["summarize_dt"]
         robjects.r("""
         subset_algorithm <- function(dt, algorithm_key) {
-            dt[algorithm==algorithm_key & data_type=="structure",]
+            dt[algorithm==algorithm_key & dataset_type=="structure",]
         }
         """)
         subset_algorithm = robjects.r["subset_algorithm"]
