@@ -1619,7 +1619,7 @@ def analyse_sensitivity(ctx, inputs):
         start_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "start")
         attribute_distance_plot = ggplot2.ggplot(subset_attribute(summarized_dt)) + ggplot2.aes_string(
             x="probability", y="mean_distance", colour="signature") + ggplot2.geom_point() + \
-            ggplot2.geom_errorbar(ggplot2.aes_string(ymax="mean_distanct+stderror_distance",
+            ggplot2.geom_errorbar(ggplot2.aes_string(ymax="mean_distance+stderror_distance",
                                                      ymin="mean_distance-stderror_distance")) + \
                                   ggplot2.facet_wrap(robjects.Formula("~algorithm"))
         attribute_distance_plot_filename = os.path.join(structure.exploratory_path(), "%s_sensitivity.png" % "attribute")
