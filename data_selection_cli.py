@@ -177,7 +177,7 @@ def index_data_by_number_of_traffic_events(ctx, paths):
     for path in paths:
         for filename in glob.glob("%s/*/*-traffic.csv" % path):
             count = _line_count(filename)
-            results.setdefault(count, []).append(filename)
+            results.setdefault(count, []).append(filename.replace("-traffic.csv", "-process.csv"))
 
     output_results(
         ctx=ctx,
