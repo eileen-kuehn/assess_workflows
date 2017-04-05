@@ -1539,7 +1539,8 @@ def analyse_attribute_sensitivity(ctx, inputs):
                 for distance_result in result:
                     signature = distance_result.get("signature")
                     algorithm = distance_result.get("algorithm")
-                    algorithm = algorithm.replace("'ProcessExitEvent', 'ProcessStartEvent'", "'ProcessStartEvent', 'ProcessExitEvent'")
+                    if "distance=StartExitDistance" in algorithm:
+                        algorithm = "IncrementalDistanceAlgorithm (cache_statistics=SetStatistics, distance=StartExitDistance (weight=0.5), supported=['ProcessStartEvent', 'ProcessExitEvent', 'TrafficEvent'])"
                     decorator = distance_result.get("decorator", {})
                     data_decorator = decorator.get("data", {})
                     for ensemble in decorator.get("normalized_ensembles", []):
