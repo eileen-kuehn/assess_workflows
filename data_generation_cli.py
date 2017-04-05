@@ -1,4 +1,5 @@
 import json
+import math
 import click
 import random
 import logging
@@ -34,6 +35,25 @@ def cli(ctx, basepath, workflow_name, step, save, use_input):
     ctx.obj["structure"] = Structure(basepath=basepath, name=workflow_name, step=step)
     ctx.obj["save"] = save
     ctx.obj["use_input"] = use_input
+
+
+class DeleteAttributeTreeEditOperation(DeleteTreeEditOperation):
+    def __init__(self, probability):
+        self._probability = probability
+
+    def __call__(self, node, mapping_reference=None, tree_reference=None):
+        current_node = node.dao()
+        del current_node["node_id"]
+        samples = random.sample(xrange(len(node.traffic)), int(math.floor(self._probability * len(node.traffic))))
+        for index in sorted(samples, reverse=True):
+            current_node["traffic"].pop(index)
+        parent = self._valid_parent(node, mapping_reference)
+        current_tree_node = tree_reference.add_node(parent=parent, **current_node)
+        try:
+            current_tree_node.ppid = parent.pid
+        except AttributeError:
+            pass
+        return [current_tree_node]
 
 
 def _generate_perturbated_tree(kwargs):
@@ -72,22 +92,32 @@ def _generate_perturbated_tree(kwargs):
         result[filepath]["tree"] = tree
         result[filepath].setdefault("perturbated_tree", {})
         for probability in probabilities:
-            ted_generator = TEDGenerator(costs=[TreeEditDistanceCost(),
-                                                FanoutWeightedTreeEditDistanceCost(),
-                                                SubtreeWeightedTreeEditDistanceCost(),
-                                                SubtreeHeightWeightedTreeEditDistanceCost(),
-                                                SubtreeWeightedTreeEditDistanceCostWithMove()] if cost else [],
-                                         operation_generator=RandomOperation(insert_probability=insert_probability,
-                                                                             delete_probability=delete_probability,
-                                                                             edit_probability=change_probability,
-                                                                             move_probability=move_probability),
-                                         probability=probability,
-                                         skip_node=skip_leaf if internal_nodes_only else (
-                                             skip_inner_node if leaf_nodes_only else (
-                                                 skip_all_but_attribute_nodes if attribute_nodes_only else skip_no_node)))
+            if attribute_nodes_only:
+                ted_generator = TEDGenerator(costs=[],
+                                             operation_generator=RandomOperation(
+                                                 delete_probability=1,
+                                                 delete_operation=DeleteAttributeTreeEditOperation(
+                                                     probability=probability)),
+                                             probability=1,
+                                             skip_node=skip_all_but_attribute_nodes)
+            else:
+                ted_generator = TEDGenerator(costs=[TreeEditDistanceCost(),
+                                                    FanoutWeightedTreeEditDistanceCost(),
+                                                    SubtreeWeightedTreeEditDistanceCost(),
+                                                    SubtreeHeightWeightedTreeEditDistanceCost(),
+                                                    SubtreeWeightedTreeEditDistanceCostWithMove()] if cost else [],
+                                             operation_generator=RandomOperation(insert_probability=insert_probability,
+                                                                                 delete_probability=delete_probability,
+                                                                                 edit_probability=change_probability,
+                                                                                 move_probability=move_probability),
+                                             probability=probability,
+                                             skip_node=skip_leaf if internal_nodes_only else (
+                                                 skip_inner_node if leaf_nodes_only else skip_no_node))
             for _ in xrange(repeat):
                 perturbated_tree = ted_generator.generate(tree)
                 result[filepath]["perturbated_tree"].setdefault(probability, []).append(perturbated_tree)
+                # reload tree
+                tree = tree_builder.build(filepath)
     return result
 
 
