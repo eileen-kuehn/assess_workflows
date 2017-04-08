@@ -1441,38 +1441,26 @@ def analyse_full_statistics(ctx, keys):
             return str("%s_%s" % (splitted[1], name))
         return str("%s" % name)
 
-    def field_value(key, data):
-        result = data
-        splitted = key.split("(")
-        if len(splitted) > 2:
-            method = splitted[1]
-            if "mean" in method:
-                try:
-                    result = sum(data) / len(data)
-                except ZeroDivisionError:
-                    result = 0
-            elif "max" in method:
-                try:
-                    result = max(data)
-                except ValueError:
-                    result = 0
-        return result
-
     if ctx.obj.get("use_input", False):
         structure = ctx.obj.get("structure", None)
         file_path = structure.input_file_path()
 
         with open(file_path, "r") as input_file:
             analysis_data = json.load(input_file).get("data", None)
-
             value_lists = {}
-            for value, results in analysis_data.items():
-                for key in keys:
-                    if key.startswith("hist"):
-                        # prepare histogram data
-                        data_key = field_name(key)
-                        value_lists.setdefault(key, {})[value] = field_value(
-                            key, results.get(data_key, None))
+            for tree_file, results in analysis_data.items():
+                value_lists.setdefault("tree", []).append(tree_file)
+                for key in ["complete_depth", "complete_fanout", "attribute_event_count", "fanout",
+                            "depth"]:
+                    for stat, stat_name in [(max, "max",),
+                                            (min, "min",),
+                                            (mean, "mean",),
+                                            (standard_deviation, "stderror",)]:
+                        value_lists.setdefault("%s_%s" % (stat_name, key), []).append(
+                            stat(results.get(key, 0)))
+                for key in ["complete_node_count", "nodes_with_attribute_count", "alphabet_count",
+                            "duration", "node_count"]:
+                    value_lists.setdefault(key, []).append(results.get(key, 0))
 
             if ctx.obj.get("save", False):
                 from rpy2.robjects.packages import importr
@@ -1481,30 +1469,51 @@ def analyse_full_statistics(ctx, keys):
 
                 base = importr("base")
                 datatable = importr("data.table")
+                result_dt = datatable.data_table(tree=base.unlist(value_lists.get("tree", [])),
+                                                 mean_complete_depth=base.unlist(value_lists.get("mean_complete_depth", [])),
+                                                 min_complete_depth=base.unlist(value_lists.get("min_complete_depth", [])),
+                                                 max_complete_depth=base.unlist(value_lists.get("max_complete_depth", [])),
+                                                 stderror_complete_depth=base.unlist(value_lists.get("stderror_complete_depth", [])),
+                                                 mean_complete_fanout=base.unlist(value_lists.get("mean_complete_fanout", [])),
+                                                 min_complete_fanout=base.unlist(value_lists.get("min_complete_fanout", [])),
+                                                 max_complete_fanout=base.unlist(value_lists.get("max_complete_fanout", [])),
+                                                 stderror_complete_fanout=base.unlist(value_lists.get("stderror_complete_fanout", [])),
+                                                 mean_attribute_event_count=base.unlist(value_lists.get("mean_attribute_event_count", [])),
+                                                 max_attribute_event_count=base.unlist(value_lists.get("max_attribute_event_count", [])),
+                                                 min_attribute_event_count=base.unlist(value_lists.get("min_attribute_event_count", [])),
+                                                 stderror_attribute_event_count=base.unlist(value_lists.get("stderror_attribute_event_count", [])),
+                                                 mean_fanout=base.unlist(value_lists.get("mean_fanout", [])),
+                                                 max_fanout=base.unlist(value_lists.get("max_fanout", [])),
+                                                 min_fanout=base.unlist(value_lists.get("min_fanout", [])),
+                                                 stderror_fanout=base.unlist(value_lists.get("stderror_fanout", [])),
+                                                 mean_depth=base.unlist(value_lists.get("mean_depth", [])),
+                                                 max_depth=base.unlist(value_lists.get("max_depth", [])),
+                                                 min_depth=base.unlist(value_lists.get("min_depth", [])),
+                                                 stderror_depth=base.unlist(value_lists.get("stderror_depth", [])),
+                                                 complete_node_count=base.unlist(value_lists.get("complete_node_count", [])),
+                                                 nodes_with_attribute_count=base.unlist(value_lists.get("nodes_with_attribute_count", [])),
+                                                 alphabet_count=base.unlist(value_lists.get("alphabet_count", [])),
+                                                 duration=base.unlist(value_lists.get("duration", [])),
+                                                 node_count=base.unlist(value_lists.get("node_count", [])),)
 
-                data = {}
                 plots = {}
-                latex_results = ""
                 prefix = "payload"
+                latex_results = "\\def\%s%sfullstatistics%s{%s}\n" % (prefix, "sample", "size", len(value_lists.get("tree", [])))
                 for key in keys:
                     if key.startswith("hist"):
-                        values = value_lists.get(key).values()
                         current_field_name = field_name(key, expanded=True)
+                        values = value_lists.get(current_field_name)
                         for variant, value_list in [("min", min(values),),
                                                     ("max", max(values),),
-                                                    ("mean", sum(values) / len(values),),
-                                                    ("median", sorted(values)[int(len(values)/2)])]:
+                                                    ("mean", sum(values) / len(values),)]:
                             latex_results += "\\def\%s%sfullstatistics%s{%s}\n" % (prefix, current_field_name.replace("_", ""), variant, value_list)
-                        result_dt = datatable.data_table(identifier=base.unlist(value_lists.get(key).keys()),
-                                                         value=base.unlist(values))
-                        data["data_%s" % current_field_name] = result_dt
-                        plots["hist_%s" % current_field_name] = ggplot2.ggplot(result_dt) + \
+                        tmp_dt = datatable.data_table(value=base.unlist(values))
+                        plots["hist_%s" % current_field_name] = ggplot2.ggplot(tmp_dt) + \
                             ggplot2.aes_string(x="value") + ggplot2.stat_bin() + \
                             ggplot2.scale_y_log10()
                 _do_the_plotting([(value, os.path.join(structure.exploratory_path(), "%s.png" % key)) for key, value in plots.items()])
                 rdata_filename = structure.intermediate_file_path(file_type="RData")
-                plots.update(data)
-                output_r_data(ctx=ctx, filename=rdata_filename, **plots)
+                output_r_data(ctx=ctx, filename=rdata_filename, result_dt=result_dt, **plots)
                 output_results(
                     ctx=ctx,
                     results=latex_results,
