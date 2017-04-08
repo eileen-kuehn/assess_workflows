@@ -2,8 +2,11 @@ from __future__ import division
 import math
 
 
-def mean(values):
-    return sum(values)/len(values)
+def mean(values, default=0):
+    try:
+        return sum(values)/len(values)
+    except ZeroDivisionError:
+        return default
 
 
 def standard_deviation(values):
