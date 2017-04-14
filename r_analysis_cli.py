@@ -1108,6 +1108,7 @@ def analyse_tree_progress(ctx):
             time_structures = []
             for sample in analysis_data.get("samples", []):
                 for tree_path in sample:
+                    event_counter = 0
                     tree = tree_builder.build(tree_path)
                     results = {}
                     base_tme = None
@@ -1115,6 +1116,8 @@ def analyse_tree_progress(ctx):
                     for event_idx, event in enumerate(tree.event_iter()):
                         if isinstance(event, EmptyProcessEvent):
                             continue
+                        else:
+                            event_counter += 1
                         if base_tme is None:
                             # perform initialisation
                             base_tme = event.tme
@@ -1140,7 +1143,7 @@ def analyse_tree_progress(ctx):
                             except KeyError:
                                 results.setdefault(tree_path, {})["structures"] = 1
                         trees.append(tree_path)
-                        events.append(event_idx)
+                        events.append(event_counter)
                         traffics.append(results.setdefault(tree_path, {}).setdefault(
                             "traffics", 0))
                         structures.append(results.setdefault(tree_path, {}).setdefault(
