@@ -63,6 +63,14 @@ def transform_matrix_to_adjacency_list(ctx, symmetric):
 @click.option("--has_ensemble", "has_ensemble", type=bool, default=True)
 @click.pass_context
 def transform_matrix_to_csv(ctx, key, has_ensemble):
+    """
+    has_ensemble means that for different identities values are encoded.
+
+    :param ctx:
+    :param key:
+    :param has_ensemble:
+    :return:
+    """
     if ctx.obj.get("use_input", False):
         results = ""
         structure = ctx.obj.get("structure", None)
