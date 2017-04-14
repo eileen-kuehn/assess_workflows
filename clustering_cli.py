@@ -69,7 +69,7 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                     core_neighbours=single_eta
                 )
                 end = time.time()
-                cluster_distance = ClusterDistance(distance=distance)
+                cluster_distance = ClusterDistance(distance=distance())
                 clustering.graph.distance = cluster_distance
                 print("---> performed clustering with eta %s and epsilon %s in %s" % (single_eta, single_epsilon, end - start))
                 results.setdefault("results", []).append({})
