@@ -59,8 +59,10 @@ def transform_matrix_to_adjacency_list(ctx, symmetric):
 
 
 @click.command()
+@click.option("--key", "key", default="normalized_matrix")
+@click.option("--has_ensemble", "has_ensemble", type=bool, default=True)
 @click.pass_context
-def transform_matrix_to_csv(ctx):
+def transform_matrix_to_csv(ctx, key, has_ensemble):
     if ctx.obj.get("use_input", False):
         results = ""
         structure = ctx.obj.get("structure", None)
@@ -70,14 +72,17 @@ def transform_matrix_to_csv(ctx):
             input_data = json.load(input_file).get("data", None)
             files = input_data["files"]
             for result_idx, result in enumerate(input_data["results"][0]):
-                decorator = result["decorator"]["normalized_matrix"]
+                decorator = result["decorator"][key]
                 maximum_index = len(decorator)
                 results += ",".join(files[result_idx])
                 results += "\n"
                 for row_index in xrange(0, maximum_index):
                     row = [0 for _ in xrange(row_index+1)]
                     for col_index in xrange(row_index+1, maximum_index):
-                        row.append(decorator[col_index][0][row_index])
+                        if has_ensemble:
+                            row.append(decorator[col_index][0][row_index])
+                        else:
+                            row.append(decorator[col_index][row_index])
                     results += "%s\n" % ",".join([str(item) for item in row])
         output_results(
             ctx=ctx,
