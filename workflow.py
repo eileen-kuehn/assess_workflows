@@ -138,6 +138,45 @@ def batch_process_from_pkl(ctx, pcount):
     )
 
 
+def _batch_process_as_vector_and_write(kwargs):
+    """
+    :param kwargs:
+    :param configurations:
+    :param files:
+    :param prototypes:
+    :param key:
+    :param path:
+    :return:
+    """
+    def path_generator():
+        for path in files:
+            yield (path, len(files))
+
+    with ExceptionFrame():
+        files = kwargs.get("files", None)
+        prototypes = kwargs.get("prototypes", None)
+        configurations = kwargs.get("configurations", None)
+        key = kwargs.get("key", None)
+        path = kwargs.get("path", None)
+        result = _init_results()
+        result["files"] = files
+        result["prototypes"] = prototypes
+        result["results"] = _process_configurations(
+            prototypes=_initialise_prototypes(prototypes),
+            configurations=configurations,
+            event_generator=path_generator
+        )
+        result["key"] = key
+        # write result
+        print("trying to write to %s" % path)
+        with open(path, "w") as outputfile:
+            dump = {
+                "data": result
+            }
+            json.dump(dump, outputfile, indent=2)
+    return result
+
+
 def _batch_process_as_vector(kwargs):
     """
     :param kwargs:
@@ -213,8 +252,6 @@ def batch_process_as_vector(ctx, pcount):
 @click.option("--pcount", "pcount", default=1)
 @click.pass_context
 def batch_process_clustering_as_vector(ctx, pcount, eta, epsilon):
-    results = []
-
     if ctx.obj.get("use_input", False):
         configuration = ctx.obj.get("configurations", None)[0]
         distance_cls = configuration.get("distances", [None])[0]
@@ -237,26 +274,18 @@ def batch_process_clustering_as_vector(ctx, pcount, eta, epsilon):
         files = [node.key for node in clustering.graph]
 
         data = []
-        for a_file in files:
+        for idx, a_file in enumerate([files[start_idx:start_idx+10] for start_idx in range(0, len(files), 10)]):
             data.append({
                 "configurations": ctx.obj["configurations"],
-                "files": [a_file],
-                "prototypes": prototypes
+                "files": a_file,
+                "prototypes": prototypes,
+                "path": structure.intermediate_file_path(variant=idx)
             })
         if pcount > 1:
-            values = do_multicore(pcount, _batch_process_as_vector, data)
-            for value in values:
-                results.append(value)
+            do_multicore(pcount, _batch_process_as_vector_and_write, data)
         else:
             for elem in data:
-                results.append(_batch_process_as_vector(elem))
-
-    output_results(
-        ctx=ctx,
-        results=results,
-        version=determine_version(os.path.dirname(assess.__file__)),
-        source="%s (%s)" % (__file__, "batch_process_clustering_as_vector")
-    )
+                _batch_process_as_vector_and_write(elem)
 
 
 @click.command(short_help="Calculate the distance matrix for given trees.")

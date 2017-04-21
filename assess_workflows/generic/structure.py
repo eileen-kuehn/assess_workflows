@@ -96,7 +96,7 @@ class Structure(object):
     def intermediate_file_path(self, name=None, step=None, variant=None, file_type=None):
         if file_type is None:
             file_type = "json"
-        if variant:
+        if variant is not None:
             return os.path.join(self.intermediate_path(name), "output_%d-%s.%s" %
                                 (step or self.step, variant, file_type))
         return os.path.join(self.intermediate_path(name), "output_%d.%s" % (step or self.step, file_type))
