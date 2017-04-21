@@ -8,9 +8,12 @@ import logging
 import importlib
 import cPickle as pickle
 
+from assess.clustering.clusterdistance import ClusterDistance
 from assess.exceptions.exceptions import EventNotSupportedException
 from assess.generators.event_generator import NodeGenerator
 from assess_workflows.utils.multicoreresult import MulticoreResult, multicore_factor
+from clustering_cli import _create_graph
+from dengraph.dengraph import DenGraphIO
 from utility.report import LVL
 from utility.exceptions import ExceptionFrame
 
@@ -201,6 +204,58 @@ def batch_process_as_vector(ctx, pcount):
         results=results,
         version=determine_version(os.path.dirname(assess.__file__)),
         source="%s (%s)" % (__file__, "batch_process_as_vector")
+    )
+
+
+@click.command()
+@click.option("--eta", "eta", type=int, default=5)
+@click.option("--epsilon", "epsilon", type=float, default=.1)
+@click.option("--pcount", "pcount", default=1)
+@click.pass_context
+def batch_process_clustering_as_vector(ctx, pcount, eta, epsilon):
+    results = []
+
+    if ctx.obj.get("use_input", False):
+        configuration = ctx.obj.get("configurations", None)[0]
+        distance_cls = configuration.get("distances", [None])[0]
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path(file_type="csv")  # expecting csv file
+
+        graph = _create_graph(ctx, file_path)
+        clustering = DenGraphIO(
+            base_graph=graph,
+            cluster_distance=epsilon,
+            core_neighbours=eta
+        )
+        cluster_distance = ClusterDistance(distance=distance_cls(), threshold=0)
+        clustering.graph.distance = cluster_distance
+        # calculate CRs from clusters
+        prototypes = []
+        for cluster in clustering:
+            for core in cluster.core_nodes:
+                prototypes.append(core.key)
+        files = [node.key for node in clustering.graph]
+
+        data = []
+        for a_file in files:
+            data.append({
+                "configurations": ctx.obj["configurations"],
+                "files": [a_file],
+                "prototypes": prototypes
+            })
+        if pcount > 1:
+            values = do_multicore(pcount, _batch_process_as_vector, data)
+            for value in values:
+                results.append(value)
+        else:
+            for elem in data:
+                results.append(_batch_process_as_vector(elem))
+
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess.__file__)),
+        source="%s (%s)" % (__file__, "batch_process_clustering_as_vector")
     )
 
 
@@ -544,6 +599,7 @@ cli.add_command(process_as_vector)
 cli.add_command(process_as_matrix)
 cli.add_command(batch_process_as_vector)
 cli.add_command(batch_process_from_pkl)
+cli.add_command(batch_process_clustering_as_vector)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.ERROR)
