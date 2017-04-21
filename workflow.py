@@ -168,7 +168,6 @@ def _batch_process_as_vector_and_write(kwargs):
         )
         result["key"] = key
         # write result
-        print("trying to write to %s" % path)
         with open(path, "w") as outputfile:
             dump = {
                 "data": result
