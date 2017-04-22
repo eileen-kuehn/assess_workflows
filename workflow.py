@@ -150,7 +150,7 @@ def _batch_process_as_vector_and_write(kwargs):
     """
     def path_generator():
         for path in files:
-            yield (path, len(files))
+            yield (path, len(prototypes))
 
     with ExceptionFrame():
         files = kwargs.get("files", None)
