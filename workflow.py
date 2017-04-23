@@ -173,7 +173,7 @@ def _batch_process_as_vector_and_write(kwargs):
                 "data": result
             }
             json.dump(dump, outputfile, indent=2)
-    return result
+    return None
 
 
 def _batch_process_as_vector(kwargs):
