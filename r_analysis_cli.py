@@ -1526,6 +1526,7 @@ def analyse_full_statistics(ctx, keys):
                     comment_sign="%"
                 )
 
+
 @click.command()
 @click.option("--inputs", "inputs", multiple=True, type=int)
 @click.pass_context
@@ -2015,6 +2016,71 @@ def analyse_performance(ctx, prefix):
                 )
 
 
+@click.command()
+@click.option("--clustermapping", "clustermapping", type=int)
+@click.option("--eta", "eta", type=int, default=6)
+@click.option("--epsilon", "epsilon", type=float, default=.2)
+@click.pass_context
+def analyse_use_case(ctx, clustermapping, eta, epsilon):
+    if ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.intermediate_file_path(step=clustermapping)
+        print("mapping at %s" % file_path)
+        print("searching for %s and %s" % (eta, epsilon))
+        with open(file_path, "r") as mapping_file:
+            mapping = json.load(mapping_file)
+            for result in mapping["data"]["results"]:
+                if int(result["meta"]["eta"]) == eta and float(result["meta"]["epsilon"]) == epsilon:
+                    cluster_mapping = result["clusters"]
+        trees_list = []
+        event_index_list = []
+        clusters_list = []
+        anomalies_list = []
+        eanomalies_list = []
+        distances_list = []
+        variant = 0
+        # TODO: determine type of cluster (reprocessing / production)
+        while True:
+            file_path = structure.intermediate_file_path(step=21, variant=variant)
+            if os.path.isfile(file_path):
+                with open(file_path, 'r') as input_file:
+                    data = json.load(input_file)["data"]
+                    files = data["files"]
+                    prototypes = data["prototypes"]
+                    for result_idx, result in enumerate(data["results"]):
+                        decorator = result["decorator"]
+                        for tree_idx, tree in enumerate(files):
+                            vector = decorator["normalized_ensembledistances"][tree_idx][0]
+                            anomaly = decorator["ensembleanomaly"][tree_idx][0]
+                            for prototype_idx, prototype in enumerate(prototypes):
+                                for event_idx, vector_value in enumerate(vector[prototype_idx]):
+                                    trees_list.append(tree)
+                                    event_index_list.append(event_idx)
+                                    distances_list.append(vector_value)
+                                    anomalies_list.append(1 if anomaly[prototype_idx][event_idx] > 1 else 0)
+                                    eanomalies_list.append(1 if anomaly[prototype_idx][event_idx] > 0 else 0)
+                                    clusters_list.append(max([cluster_idx for cluster_idx, cluster in enumerate(prototypes) if prototype in cluster]))
+                variant += 1
+            else:
+                break
+        if ctx.obj.get("save", False):
+            from rpy2.robjects.packages import importr
+            from rpy2 import robjects
+
+            base = importr("base")
+            datatable = importr("data.table")
+            result_dt = datatable.data_table(tree=base.unlist(trees_list),
+                                             event=base.unlist(event_index_list),
+                                             cluster=base.unlist(clusters_list),
+                                             anomaly=base.unlist(anomalies_list),
+                                             eanomaly=base.unlist(eanomalies_list),
+                                             distance=base.unlist(distances_list))
+            rdata_filename = structure.intermediate_file_path(file_type="RData")
+            output_r_data(
+                ctx=ctx, filename=rdata_filename, result_dt=result_dt
+            )
+
+
 def _upper_and_lower_plot(variant, overlap_dt, optimal_rfunction_name, base_distance):
     from rpy2 import robjects
     from rpy2.robjects.packages import importr
@@ -2133,6 +2199,7 @@ cli.add_command(analyse_performance)
 cli.add_command(analyse_correlation)
 cli.add_command(analyse_sensitivity)
 cli.add_command(analyse_attribute_sensitivity)
+cli.add_command(analyse_use_case)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)

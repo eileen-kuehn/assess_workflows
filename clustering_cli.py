@@ -85,7 +85,8 @@ def perform_precalculated_clustering(ctx, eta, epsilon):
                 for noise in clustering.noise:
                     current_result.setdefault("noise", []).append(noise.key)
                 # for score in [silhouette_score, calinski_harabasz_score, davies_bouldin_score]:
-                for score in [silhouette_score]:
+                # for score in [silhouette_score]:
+                for score in []:
                     try:
                         the_score = score(clustering.clusters, clustering.graph)
                     except ValueError:
