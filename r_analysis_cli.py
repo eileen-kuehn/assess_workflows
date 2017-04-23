@@ -2023,18 +2023,37 @@ def analyse_performance(ctx, prefix):
 @click.pass_context
 def analyse_use_case(ctx, clustermapping, eta, epsilon):
     if ctx.obj.get("use_input", False):
+        def minimise_key(key):
+            if key.startswith("wmagent"):
+                base = key.replace("wmagent_", "")
+                base = "_".join(base.split("_")[:2])
+                return "-".join(base.split("-")[:-1])
+            return ""
+        def map_type(file_path, type_mapping):
+            for type_key, types in type_mapping.items():
+                for status_key, status in types.items():
+                    for campaign, file_list in status.items():
+                        if file_path in file_list:
+                            return (type_key, status_key, campaign, minimise_key(campaign))
+            return None
         structure = ctx.obj.get("structure", None)
         file_path = structure.intermediate_file_path(step=clustermapping)
-        print("mapping at %s" % file_path)
-        print("searching for %s and %s" % (eta, epsilon))
         with open(file_path, "r") as mapping_file:
             mapping = json.load(mapping_file)
             for result in mapping["data"]["results"]:
                 if int(result["meta"]["eta"]) == eta and float(result["meta"]["epsilon"]) == epsilon:
                     cluster_mapping = result["clusters"]
+        file_path = structure.intermediate_file_path(step=3)
+        with open(file_path, "r") as mapping_file:
+            mapping = json.load(mapping_file)
+            type_mapping = mapping["data"]
         trees_list = []
         event_index_list = []
         clusters_list = []
+        types_list = []
+        status_list = []
+        campaign_list = []
+        short_campaign_list = []
         anomalies_list = []
         eanomalies_list = []
         distances_list = []
@@ -2053,13 +2072,19 @@ def analyse_use_case(ctx, clustermapping, eta, epsilon):
                             vector = decorator["normalized_ensembledistances"][tree_idx][0]
                             anomaly = decorator["ensembleanomaly"][tree_idx][0]
                             for prototype_idx, prototype in enumerate(prototypes):
+                                type_key, status_key, campaign, short_campaign = map_type(prototype, type_mapping)
+                                cluster_id = max([cluster_idx for cluster_idx, cluster in enumerate(cluster_mapping) if prototype in cluster])
                                 for event_idx, vector_value in enumerate(vector[prototype_idx]):
                                     trees_list.append(tree)
                                     event_index_list.append(event_idx)
                                     distances_list.append(vector_value)
                                     anomalies_list.append(1 if anomaly[prototype_idx][event_idx] > 1 else 0)
                                     eanomalies_list.append(1 if anomaly[prototype_idx][event_idx] > 0 else 0)
-                                    clusters_list.append(max([cluster_idx for cluster_idx, cluster in enumerate(prototypes) if prototype in cluster]))
+                                    clusters_list.append(cluster_id)
+                                    types_list.append(type_key)
+                                    status_list.append(status_key)
+                                    campaign_list.append(campaign)
+                                    short_campaign_list.append(short_campaign)
                 variant += 1
             else:
                 break
@@ -2074,7 +2099,11 @@ def analyse_use_case(ctx, clustermapping, eta, epsilon):
                                              cluster=base.unlist(clusters_list),
                                              anomaly=base.unlist(anomalies_list),
                                              eanomaly=base.unlist(eanomalies_list),
-                                             distance=base.unlist(distances_list))
+                                             distance=base.unlist(distances_list),
+                                             activity=base.unlist(types_list),
+                                             status=base.unlist(status_list),
+                                             campaign=base.unlist(campaign_list),
+                                             short_campaign=base.unlist(short_campaign_list))
             rdata_filename = structure.intermediate_file_path(file_type="RData")
             output_r_data(
                 ctx=ctx, filename=rdata_filename, result_dt=result_dt
