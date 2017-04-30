@@ -1716,6 +1716,40 @@ def analyse_sensitivity(ctx, inputs):
 @click.command()
 @click.option("--inputs", "inputs", multiple=True, type=int)
 @click.pass_context
+def analyse_distance_vector(ctx, inputs):
+    structure = ctx.obj.get("structure", None)
+    event_list = []
+    distance_list = []
+    file_list = []
+    for file_index, input in enumerate(inputs):
+        file_path = structure.intermediate_file_path(step=input)
+        with open(file_path, "r") as input_file:
+            analysis_data = json.load(input_file).get("data", None)
+            distances = analysis_data["results"][0][0]["decorator"]["distances"][0][0][0]
+            for index, distance in enumerate(distances):
+                event_list.append(index)
+                distance_list.append(distance)
+                file_list.append(input)
+    if ctx.obj.get("save", False):
+        from rpy2.robjects.packages import importr
+        from rpy2 import robjects
+        from rpy2.robjects.lib.dplyr import DataFrame
+        from rpy2.robjects.lib.ggplot2 import ggplot2
+
+        base = importr("base")
+        datatable = importr("data.table")
+        result_dt = datatable.data_table(event=base.unlist(event_list),
+                                         distance=base.unlist(distance_list),
+                                         variant=base.unlist(file_list))
+        rdata_filename = structure.intermediate_file_path(file_type="RData")
+        output_r_data(
+            ctx=ctx, filename=rdata_filename, result_dt=result_dt
+        )
+
+
+@click.command()
+@click.option("--inputs", "inputs", multiple=True, type=int)
+@click.pass_context
 def analyse_correlation(ctx, inputs):
     """
     Attention: this method handles data very statically and assumes three input files. The first
@@ -2229,6 +2263,7 @@ cli.add_command(analyse_correlation)
 cli.add_command(analyse_sensitivity)
 cli.add_command(analyse_attribute_sensitivity)
 cli.add_command(analyse_use_case)
+cli.add_command(analyse_distance_vector)
 
 if __name__ == '__main__':
     logging.getLogger().setLevel(LVL.WARNING)

@@ -88,8 +88,9 @@ def process_as_vector(ctx, trees, representatives):
 
 @click.command()
 @click.option("--pcount", "pcount", type=int, default=1)
+@click.option("--reverse", "reverse", type=bool, default=False)
 @click.pass_context
-def batch_process_from_pkl(ctx, pcount):
+def batch_process_from_pkl(ctx, pcount, reverse):
     results = _init_results()
     results["distance"] = []
     results["prototypes"] = []
@@ -110,7 +111,8 @@ def batch_process_from_pkl(ctx, pcount):
                 data.append({
                     "data_pkl_path": pkl_path,
                     "data_pkl_key": key,
-                    "configurations": ctx.obj["configurations"]
+                    "configurations": ctx.obj["configurations"],
+                    "reverse": reverse
                 })
             if pcount > 1:
                 result_list = (
@@ -461,6 +463,7 @@ def _process_configurations_for_row(kwargs):
     prototype_keys = []
     precalculated_costs = {}
     with ExceptionFrame():
+        reverse = kwargs.pop("reverse")
         data_pkl_path = kwargs.pop('data_pkl_path')
         data_pkl_key = kwargs.pop('data_pkl_key')
         with open(data_pkl_path) as input_pkl:
@@ -475,6 +478,10 @@ def _process_configurations_for_row(kwargs):
             # append precalculated distances
             for cost_model, distance in perturbated_tree.distance.items():
                 precalculated_costs.setdefault(cost_model.__class__.__name__, []).append(distance)
+        if reverse:
+            tmp = prototypes[:]
+            prototypes = [tree]
+            tree = tmp[0]
         # calculate actual results
         configurations = kwargs.get("configurations", {})
         for configuration in configurations:
