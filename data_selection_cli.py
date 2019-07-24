@@ -8,10 +8,11 @@ import subprocess
 
 from assess.exceptions.exceptions import TreeInvalidatedException
 from assess_workflows.utils.multicoreresult import MulticoreResult
-from dbutils.sqlcommand import SQLCommand
+try:
+    from dbutils.sqlcommand import SQLCommand
+except:
+    pass
 from gnmutils.exceptions import DataNotInCacheException
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 from assess.generators.gnm_importer import CSVTreeBuilder
 from assess.events.events import ProcessStartEvent, ProcessExitEvent, TrafficEvent
@@ -445,7 +446,7 @@ def pick_samples(ctx, seed, repeat, count, minimum, skip_key):
                     working_data = {value for values in input_data.values() for value in values}
                 for key, values in working_data.items():
                     try:
-                        for _ in xrange(repeat):
+                        for _ in range(repeat):
                             results.setdefault(key, []).append(random.sample(values, count))
                     except ValueError:
                         if minimum == 0 or minimum <= len(values):
@@ -454,7 +455,7 @@ def pick_samples(ctx, seed, repeat, count, minimum, skip_key):
                             continue
             except AttributeError:
                 key = "samples"
-                for _ in xrange(repeat):
+                for _ in range(repeat):
                     results.setdefault(key, []).append(random.sample(working_data, count))
 
     output_results(
@@ -632,7 +633,6 @@ cli.add_command(pick_samples)
 cli.add_command(aggregate_samples)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')

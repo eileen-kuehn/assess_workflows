@@ -5,14 +5,11 @@ import random
 import logging
 import hashlib
 import time
-import cPickle as pickle
+import pickle
 
 from assess.generators.gnm_importer import CSVTreeBuilder
 from assess_workflows.utils.multicoreresult import MulticoreResult
 from assess_workflows.utils.utils import do_multicore
-
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 from treedistancegenerator.ted_generator import TEDGenerator
 from treedistancegenerator.costs.costs import *
@@ -44,7 +41,7 @@ class DeleteAttributeTreeEditOperation(DeleteTreeEditOperation):
     def __call__(self, node, mapping_reference=None, tree_reference=None):
         current_node = node.dao()
         del current_node["node_id"]
-        samples = random.sample(xrange(len(node.traffic)), int(math.floor(self._probability * len(node.traffic))))
+        samples = random.sample(range(len(node.traffic)), int(math.floor(self._probability * len(node.traffic))))
         for index in sorted(samples, reverse=True):
             current_node["traffic"].pop(index)
         parent = self._valid_parent(node, mapping_reference)
@@ -113,7 +110,7 @@ def _generate_perturbated_tree(kwargs):
                                              probability=probability,
                                              skip_node=skip_leaf if internal_nodes_only else (
                                                  skip_inner_node if leaf_nodes_only else skip_no_node))
-            for _ in xrange(repeat):
+            for _ in range(repeat):
                 perturbated_tree = ted_generator.generate(tree)
                 result[filepath]["perturbated_tree"].setdefault(probability, []).append(perturbated_tree)
                 # reload tree
@@ -202,7 +199,6 @@ def generate_perturbated_tree(ctx, seed, repeat, probabilities, insert_probabili
 cli.add_command(generate_perturbated_tree)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix="DISS")
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix="DISS")

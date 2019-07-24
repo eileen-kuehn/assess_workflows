@@ -9,13 +9,10 @@ import assess_workflows
 from assess.exceptions.exceptions import EventNotSupportedException
 from assess_workflows.utils.utils import output_results, determine_version
 from dengraph.graphs import graph_io
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 from dengraph.quality.silhouette import silhouette_score
 from dengraph.quality.calinski_harabasz import calinski_harabasz_score
 from dengraph.quality.davies_bouldin import davies_bouldin_score
-from dengraph.graphs.adjacency_graph import AdjacencyGraph
 from dengraph.dengraph import DenGraphIO
 
 from assess.clustering.clustering import Clustering
@@ -310,13 +307,13 @@ def _create_graph(ctx, file_path):
         )
         return graph
 
+
 cli.add_command(perform_clustering)
 cli.add_command(perform_precalculated_clustering)
 cli.add_command(perform_classification)
 cli.add_command(validate_representatives)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')

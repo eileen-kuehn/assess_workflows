@@ -81,7 +81,7 @@ class Workflow(object):
         from_step = target or from_step or (current_step - 1)
         self.add_task(
             cli_path=Structure.generic_cli(),
-            cmd="intermediate_as_input",
+            cmd="intermediate-as-input",
             from_step=target or from_step or (current_step - 1),
             to_step=current_step + 1,
             name="Preparing %s for %s" % ((name or reference or from_step), current_step + 1),
@@ -99,7 +99,8 @@ class Workflow(object):
         """
         print("Using environment %s" % environment_variables)
         environment = os.environ
-        environment.update(environment_variables)
+        if environment_variables is not None:
+            environment.update(environment_variables)
         environment["PYTHONPATH"] = os.path.abspath(sys.path[0]) + \
             (':' + os.environ['PYTHONPATH'] if 'PYTHONPATH' in os.environ else '')
         for index, task in enumerate(self._tasks[start:end], start=start):

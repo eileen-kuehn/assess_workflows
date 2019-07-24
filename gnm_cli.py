@@ -8,8 +8,6 @@ from assess_workflows.utils.utils import do_multicore
 from gnmutils.pilot import Pilot
 from gnmutils.sources.datasource import DataSource
 from gnmutils.utils import relevant_directories
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 
 @click.group()
@@ -80,16 +78,15 @@ def _prepare_raw_data(kwargs):
     :param path: the path to process
     :param output_path: the path to save the output to
     """
-    with ExceptionFrame():
-        path = kwargs.get("path", None)
-        output_path = kwargs.get("output_path", None)
-        data_source = DataSource.best_available_data_source()
-        for job in data_source.jobs(
-                source="raw", path=path, data_path=output_path, stateful=False):
-            data_source.write_job(data=job, path=output_path)
-        for traffic in data_source.traffics(
-                source="raw", path=path, data_path=output_path, stateful=False):
-            data_source.write_traffic(data=traffic, path=output_path)
+    path = kwargs.get("path", None)
+    output_path = kwargs.get("output_path", None)
+    data_source = DataSource.best_available_data_source()
+    for job in data_source.jobs(
+            source="raw", path=path, data_path=output_path, stateful=False):
+        data_source.write_job(data=job, path=output_path)
+    for traffic in data_source.traffics(
+            source="raw", path=path, data_path=output_path, stateful=False):
+        data_source.write_traffic(data=traffic, path=output_path)
 
 
 def _create_payloads(kwargs):
@@ -108,11 +105,11 @@ def _create_payloads(kwargs):
                 else:
                     logging.info("current pilot is not a CMS pilot")
 
+
 cli.add_command(prepare_raw_data)
 cli.add_command(create_payloads)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix="DISS")
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix="DISS")

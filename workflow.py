@@ -1,4 +1,3 @@
-from __future__ import print_function
 import os
 import sys
 import json
@@ -6,16 +5,13 @@ import math
 import click
 import logging
 import importlib
-import cPickle as pickle
+import pickle
 
 from assess.clustering.clusterdistance import ClusterDistance
 from assess.exceptions.exceptions import EventNotSupportedException
-from assess.generators.event_generator import NodeGenerator
-from assess_workflows.utils.multicoreresult import MulticoreResult, multicore_factor
+from assess_workflows.utils.multicoreresult import multicore_factor
 from clustering_cli import _create_graph
 from dengraph.dengraph import DenGraphIO
-from utility.report import LVL
-from utility.exceptions import ExceptionFrame
 
 import assess
 from assess.generators.gnm_importer import CSVTreeBuilder, GNMCSVEventStreamer
@@ -343,7 +339,6 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
                         "prototype_paths": col_trees,
                         "configurations": ctx.obj["configurations"]
                     })
-
             result_list = do_multicore(
                 count=pcount,
                 target=_process_as_matrix,
@@ -386,7 +381,7 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
             for index, final in enumerate(finals.get("results", [])):
                 for value in final_decorators[index].values():
                     data = value.descriptive_data()
-                    final.get("decorator", {})[data.keys()[0]] = data.values()[0]
+                    final.get("decorator", {})[list(data.keys())[0]] = list(data.values())[0]
             results.setdefault("results", []).append(finals["results"])
     else:
         to_process = []
@@ -637,7 +632,6 @@ cli.add_command(batch_process_from_pkl)
 cli.add_command(batch_process_clustering_as_vector)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.ERROR)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.ERROR)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')

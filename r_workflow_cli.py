@@ -5,8 +5,6 @@ import logging
 from cpy2py import TwinMaster, meta
 
 from assess_workflows.generic.structure import Structure
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 
 @click.group()
@@ -81,14 +79,14 @@ def do_performance_plots(ctx_obj):
                     DataFrame(dt_summary).filter("signature=='%s'" % signature_object),
                     performance_object
                 )
-    print assess
+    print(assess)
+
 
 cli.add_command(performance_plots)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        twinterpreter = TwinMaster(twinterpreter_id='/usr/local/bin/python', executable='/usr/local/bin/python')
-        twinterpreter.start()
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    twinterpreter = TwinMaster(twinterpreter_id='/usr/local/bin/python', executable='/usr/local/bin/python')
+    twinterpreter.start()
+    cli(obj={}, auto_envvar_prefix='DISS')

@@ -51,9 +51,6 @@ import datetime
 
 from assess_workflows.generic.structure import Structure
 
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
-
 
 @click.group()
 @click.option("--basepath", "basepath", required=True, multiple=False)
@@ -156,12 +153,12 @@ def finalise(ctx, from_steps, file_type):
         shutil.copyfile(file_path, structure.final_file_path(step=from_step, file_type=file_type))
         # TODO: maybe write protect the file?
 
+
 cli.add_command(create_workflow)
 cli.add_command(intermediate_as_input)
 cli.add_command(finalise)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix="DISS")
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix="DISS")

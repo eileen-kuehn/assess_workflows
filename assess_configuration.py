@@ -11,7 +11,9 @@ def build_decorator():
     # build decorator chain
     return anomaly
 
+
 signature_class = ParentChildByNameTopologySignature
+
 
 def chance_generator(range_values, repetition_values):
     splittings = (item for sublist in map(lambda x,y: [x] * y, range_values, repetition_values) for item in sublist)
@@ -20,6 +22,7 @@ def chance_generator(range_values, repetition_values):
     for splitting in splittings:
         current += splitting
         yield current
+
 
 def branch_relabeller(signature, prune_chance, **kwargs):
     csv_event_streamer = GNMCSVEventStreamer(**kwargs)

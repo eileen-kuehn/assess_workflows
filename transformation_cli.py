@@ -9,8 +9,6 @@ import logging
 
 from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.utils import output_results, determine_version
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 
 @click.group()
@@ -84,9 +82,9 @@ def transform_matrix_to_csv(ctx, key, has_ensemble):
                 maximum_index = len(decorator)
                 results += ",".join(files[result_idx])
                 results += "\n"
-                for row_index in xrange(0, maximum_index):
-                    row = [0 for _ in xrange(row_index+1)]
-                    for col_index in xrange(row_index+1, maximum_index):
+                for row_index in range(0, maximum_index):
+                    row = [0 for _ in range(row_index+1)]
+                    for col_index in range(row_index+1, maximum_index):
                         if has_ensemble:
                             row.append(decorator[col_index][0][row_index])
                         else:
@@ -116,8 +114,8 @@ def transform_matrix_to_sql(ctx):
             # each list is a row within the matrix, inside the matrix, everything above the diagonal
             # including diagonal is 0, so results can be skipped here
             data = input_data["results"][0]["decorator"]["normalized_matrix"]
-            for row_index in xrange(0, len(data)):
-                for column_index in xrange(0, row_index):
+            for row_index in range(0, len(data)):
+                for column_index in range(0, row_index):
                     if len(result) > 46:  # length of INSERT INTO...
                         result += ",\n"
                     result += "(%d,%d,%s)" % (row_index, column_index, data[row_index][column_index])
@@ -152,13 +150,13 @@ def transform_mapping_to_sql(ctx, paths):
             source="%s (%s)" % (__file__, "transform_mapping_to_sql")
         )
 
+
 cli.add_command(transform_matrix_to_adjacency_list)
 cli.add_command(transform_matrix_to_sql)
 cli.add_command(transform_matrix_to_csv)
 cli.add_command(transform_mapping_to_sql)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')

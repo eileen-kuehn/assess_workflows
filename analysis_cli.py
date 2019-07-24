@@ -13,9 +13,6 @@ from assess_workflows.utils.statistics import uncorrelated_relative_deviation_an
     standard_deviation
 from gnmutils.exceptions import DataNotInCacheException
 
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
-
 from assess.generators.gnm_importer import CSVTreeBuilder
 
 from assess_workflows.generic.structure import Structure
@@ -757,6 +754,7 @@ def _analyse_diamonds(kwargs):
                 current_result.setdefault("files", []).append(filepath)
     return result
 
+
 cli.add_command(analyse_duration)
 cli.add_command(analyse_compression)
 cli.add_command(analyse_metric)
@@ -765,7 +763,6 @@ cli.add_command(analyse_diamond_perturbations)
 cli.add_command(full_statistics)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')

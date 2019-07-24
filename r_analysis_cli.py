@@ -15,8 +15,6 @@ from assess_workflows.generic.structure import Structure
 from assess_workflows.utils.statistics import uncorrelated_relative_max_distance_deviation, \
     standard_deviation, mean
 from assess_workflows.utils.utils import output_r_data, output_results, determine_version
-from utility.exceptions import ExceptionFrame
-from utility.report import LVL
 
 from assess.algorithms.statistics.setstatistics import SetStatistics
 from assess.algorithms.statistics.splittedstatistics import SplittedStatistics
@@ -1197,7 +1195,7 @@ def analyse_anomalies(ctx):
                 for anomaly_idx, anomaly in enumerate(anomaly_decorator):
                     clusters = anomaly[0]
                     # take first cluster as a reference for idx
-                    for event_index in xrange(len(clusters[0])):
+                    for event_index in range(len(clusters[0])):
                         # determine first position of 0
                         events.append(event_index)
                         cluster_counts.append(len(clusters) - sum([cluster[event_index] for cluster in clusters]))
@@ -1279,7 +1277,7 @@ def analyse_classification(ctx):
                 for tree_idx, distances in enumerate(distance_decorator):
                     current_clusters = distances[0]  # length 1
                     # take first cluster as a reference for idx
-                    for event_index in xrange(len(current_clusters[0])):
+                    for event_index in range(len(current_clusters[0])):
                         # determine first position of 0
                         events.append(event_index)
                         distance_values = [cluster[event_index] for cluster in current_clusters]
@@ -2245,6 +2243,7 @@ def _distance_and_statistic(base_statistic, distribution_values):
         current_statistic.add(value)
     return distance, current_statistic
 
+
 cli.add_command(analyse_compression)
 cli.add_command(analyse_diamonds)
 cli.add_command(analyse_diamond_perturbations)
@@ -2266,7 +2265,6 @@ cli.add_command(analyse_use_case)
 cli.add_command(analyse_distance_vector)
 
 if __name__ == '__main__':
-    logging.getLogger().setLevel(LVL.WARNING)
-    logging.getLogger("EXCEPTION").setLevel(LVL.INFO)
-    with ExceptionFrame():
-        cli(obj={}, auto_envvar_prefix='DISS')
+    logging.getLogger().setLevel(logging.WARNING)
+    logging.getLogger("EXCEPTION").setLevel(logging.INFO)
+    cli(obj={}, auto_envvar_prefix='DISS')
