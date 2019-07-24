@@ -18,11 +18,16 @@ class Task(object):
         self.name = name
 
     def build_subprocess(self, **kwargs):
-        command = "python %s --step %s %s %s %s %s" % (
+        json = self.others.pop("json", False)
+        hdf = self.others.pop("hdf", False)
+        command = "%s %s --step %s %s %s %s %s %s %s" % (
+            sys.executable,
             self.cli_path or Structure.workflow_cli(),
             kwargs.get("index", 0),
             ("--save" if self.save else ""),
             ("--use_input" if self.use_input else ""),
+            ("--json" if json else ""),
+            ("--hdf" if hdf else ""),
             self.cmd,
             " ".join(
                 ["--%s %s" % (key, value) for (key, values) in self.others.items() for

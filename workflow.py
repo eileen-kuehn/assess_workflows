@@ -32,12 +32,22 @@ from assess.decorators.decorator import Decorator
               help="Maximum number of trees to consider for measurements.")
 @click.option("--json", "json", is_flag=True,
               help="Provide JSON output formatting")
+@click.option("--hdf", "hdf", is_flag=True,
+              help="Provide HDF5 output formatting")
 @click.option("--save", "save", is_flag=True)
 @click.option("--use_input", "use_input", is_flag=True,
               help="Use input file specified for current task.")
 @click.pass_context
-def cli(ctx, basepath, workflow_name, step, configuration, start, maximum, json, save, use_input):
-    ctx.obj["json"] = json or save
+def cli(ctx, basepath, workflow_name, step, configuration, start, maximum, json, hdf, save, use_input):
+    if not hdf and json:
+        ctx.obj["json"] = True
+    else:
+        ctx.obj["hdf"] = hdf
+        ctx.obj["json"] = json
+    if ctx.obj.get("json", False):
+        ctx.obj["file_type"] = "json"
+    elif ctx.obj.get("hdf", False):
+        ctx.obj["file_type"] = "h5"
     ctx.obj["save"] = save
     ctx.obj["use_input"] = use_input
     ctx.obj["start"] = start
@@ -413,7 +423,8 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         ctx=ctx,
         results=results,
         version=os.path.dirname(assess.__file__),
-        source="%s (%s)" % (__file__, "process_as_matrix")
+        source="%s (%s)" % (__file__, "process_as_matrix"),
+        file_type=ctx.obj.get("file_type", None)
     )
 
 

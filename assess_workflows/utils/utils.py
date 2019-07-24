@@ -1,10 +1,28 @@
-from __future__ import print_function
+import contextlib
 import json
 import datetime
+import os
 import subprocess
 import multiprocessing
+import sys
+import pandas as pd
+import numpy as np
 
-from evenmoreutils.files import smart_open
+
+@contextlib.contextmanager
+def smart_open(filename=None):
+    if filename.endswith(".h5"):
+        handle = pd.HDFStore(filename)
+    elif filename and filename != '-':
+        handle = open(filename, 'w')
+    else:
+        handle = sys.stdout
+
+    try:
+        yield handle
+    finally:
+        if handle is not sys.stdout:
+            handle.close()
 
 
 def determine_version(path):
@@ -30,6 +48,7 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
     :return:
     """
     format_json = ctx.obj.get("json", False)
+    format_hdf = ctx.obj.get("hdf", False)
     file_name = None if not ctx.obj.get("save", False) else \
         ctx.obj.get("structure").intermediate_file_path(variant=variant, file_type=file_type)
     with smart_open(filename=file_name) as output_channel:
@@ -43,6 +62,28 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
                 "data": results
             }
             print(json.dumps(dump, indent=2), file=output_channel)
+        elif format_hdf:
+            tree_references = [os.path.basename(name).split("-")[-1].split(
+                ".")[0] for name in results.get("files", [])]
+            for index, result in enumerate(results.get("results")[0]):
+                # assuming one matrix decorator per result
+                data = []
+                matrix = result.get("decorator").get("matrix")
+                for row in matrix:
+                    data.append(row[0])
+                output_channel.put("df_%d" % index, pd.DataFrame(
+                    np.array(data),
+                    columns=tree_references,
+                    index=tree_references
+                ))
+                output_channel.get_storer("df_%d" % index).attrs.meta = {
+                    "algorithm": result.get("algorithm", None),
+                    "signature": result.get("signature", None),
+                    "event_streamer": result.get("event_streamer", None),
+                    "date": "%s" % datetime.datetime.now(),
+                    "source": "%s" % source if source else "unknown",
+                    "version": "%s" % version if version else "unknown"
+                }
         else:
             print("%s date: %s" % (comment_sign, datetime.datetime.now()), file=output_channel)
             print("%s source: %s" % (comment_sign, source if source else "unknown"), file=output_channel)
