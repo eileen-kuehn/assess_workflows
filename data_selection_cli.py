@@ -59,7 +59,6 @@ def _relevant_files_for_context(ctx, path):
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
 def index_valid_hdf_trees(ctx, paths, pcount):
-    print("starting to load hdf5 files")
     structure = ctx.obj.get("structure", None)
     results = []
     if pcount > 1:
