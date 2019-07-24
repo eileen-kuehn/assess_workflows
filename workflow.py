@@ -310,7 +310,11 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
         file_path = structure.input_file_path()
         with open(file_path, "r") as input_file:
             # can be list of lists or flat list
-            trees = json.load(input_file).get("data").values()[0]
+            data = json.load(input_file).get("data")
+            try:
+                trees = data.values()[0]
+            except AttributeError:
+                trees = data
     results = _init_results()
     results["files"] = results["prototypes"] = trees[:]
 
@@ -601,24 +605,27 @@ def _get_input_files(file_paths=None, minimum=0, maxlen=float("Inf")):
     for file_path in file_paths:
         # check if file contains list of paths or data
         if len(result) < maxlen:
-            with open(file_path, "r") as input_file:
-                # check first line of file
-                index = 0
-                line = next(input_file)
-                if "#" in line[0]:
-                    # I guess it is a valid CSV file, starting with comment
-                    result.append(file_path)
-                elif len(line.split(",")) > 4:
-                    # found CSV formatted strings
-                    result.append(file_path)
-                else:
-                    if index >= minimum and len(result) < maxlen:
-                        result.append(line.strip())
-                    for index, line in enumerate(input_file):
+            if file_path.endswith(".pkl"):
+                result.append(file_path)
+            else:
+                with open(file_path, "r") as input_file:
+                    # check first line of file
+                    index = 0
+                    line = next(input_file)
+                    if "#" in line[0]:
+                        # I guess it is a valid CSV file, starting with comment
+                        result.append(file_path)
+                    elif len(line.split(",")) > 4:
+                        # found CSV formatted strings
+                        result.append(file_path)
+                    else:
                         if index >= minimum and len(result) < maxlen:
                             result.append(line.strip())
-                        else:
-                            break
+                        for index, line in enumerate(input_file):
+                            if index >= minimum and len(result) < maxlen:
+                                result.append(line.strip())
+                            else:
+                                break
     return result
 
 
@@ -632,7 +639,11 @@ def _initialise_prototypes(prototype_paths):
     prototypes = []
     tree_builder = CSVTreeBuilder()
     for prototype_path in prototype_paths:
-        prototypes.append(tree_builder.build(prototype_path))
+        if prototype_path.endswith(".pkl"):
+            with open(prototype_path, "rb") as pkl_file:
+                prototypes.append(pickle.load(pkl_file))
+        else:
+            prototypes.append(tree_builder.build(prototype_path))
     return prototypes
 
 

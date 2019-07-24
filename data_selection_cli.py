@@ -1,12 +1,17 @@
 import os
 import glob
 import json
+import pickle
+
 import click
 import random
 import logging
 import subprocess
+import pandas as pd
 
 from assess.exceptions.exceptions import TreeInvalidatedException
+from assess.prototypes.simpleprototypes import Prototype
+
 from assess_workflows.utils.multicoreresult import MulticoreResult
 try:
     from dbutils.sqlcommand import SQLCommand
@@ -47,6 +52,76 @@ def _relevant_files_for_context(ctx, path):
     else:
         filenames.extend(glob.glob("%s/*/*-process.csv" % path))
     return filenames
+
+
+@click.command()
+@click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--pcount", "pcount", type=int, default=1)
+@click.pass_context
+def index_valid_hdf_trees(ctx, paths, pcount):
+    print("starting to load hdf5 files")
+    structure = ctx.obj.get("structure", None)
+    results = []
+    if pcount > 1:
+        trees = do_multicore(
+            count=pcount,
+            target=_valid_hdf_tree,
+            data=paths
+        )
+        for tree, name in trees:
+            results.append(_write_tree_to_pkl(structure, tree, name))
+    else:
+        for filename in paths:
+            trees = _valid_hdf_tree(filename)
+            for tree, name in trees:
+                results.append(_write_tree_to_pkl(structure, tree, name))
+    output_results(
+        ctx=ctx,
+        results=results,
+        version=determine_version(os.path.dirname(assess_workflows.__file__)),
+        source="%s (%s)" % (__file__, "index_hdf_trees")
+    )
+
+
+def _write_tree_to_pkl(structure, tree, name):
+    pkl_filename = structure.intermediate_file_path(variant=str(name), file_type="pkl")
+    with open(pkl_filename, "wb") as pkl_file:
+        pickle.dump(tree, pkl_file)
+    return pkl_filename
+
+
+def _valid_hdf_tree(filename):
+    results = []
+    df = pd.read_hdf(filename, key="train_events")
+    label = df.index.levels[0][0]
+    events = df.index.levels[1]
+    for event in events:
+        tree_data = df.xs((label, event), level=('label', 'evtNum'))
+        tree = Prototype()
+        last_node = None
+        for node_id, values in tree_data.iterrows():
+            # add tme values
+            tree_values = dict(values)
+            tree_values["tme"] = tree_values["exit_tme"] = 0
+            parent_node_id = int(values.pop("motherIndex"))
+            name = values.pop("PDG")
+            if last_node is not None:
+                node = tree.add_node(
+                    name,
+                    parent_node_id=parent_node_id,
+                    node_id=node_id,
+                    **tree_values
+                )
+            else:
+                node = tree.add_node(
+                    name,
+                    node_id=node_id,
+                    **tree_values
+                )
+            last_node = node
+        if tree:
+            results.append((tree, event,))
+    return results
 
 
 @click.command()
@@ -618,6 +693,7 @@ def _tree_statistics(filename):
 
 
 cli.add_command(index_valid_trees)
+cli.add_command(index_valid_hdf_trees)
 cli.add_command(index_data_by_tme)
 cli.add_command(index_data_by_uid)
 cli.add_command(index_data_by_number_of_nodes)
