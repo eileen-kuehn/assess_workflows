@@ -78,7 +78,7 @@ def index_valid_hdf_trees(ctx, paths, pcount):
         ctx=ctx,
         results=results,
         version=determine_version(os.path.dirname(assess_workflows.__file__)),
-        source="%s (%s)" % (__file__, "index_hdf_trees")
+        source="%s (%s)" % (__file__, "index_valid_hdf_trees")
     )
 
 
