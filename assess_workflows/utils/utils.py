@@ -65,15 +65,20 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
         elif format_hdf:
             tree_references = [os.path.basename(name).split("-")[-1].split(
                 ".")[0] for name in results.get("files", [])]
-            for index, result in enumerate(results.get("results")[0]):
-                # assuming one matrix decorator per result
+            # check for representatives
+            prototype_references = [os.path.basename(name).split("-")[-1].split(
+                ".")[0] for name in results.get("prototypes", [])]
+            for index, result in enumerate(results.get("results")):
                 data = []
+                if not isinstance(result, dict):
+                    result = result[0]
+                # assuming one matrix decorator per result
                 matrix = result.get("decorator").get("matrix")
                 for row in matrix:
                     data.append(row[0])
                 output_channel.put("df_%d" % index, pd.DataFrame(
                     np.array(data),
-                    columns=tree_references,
+                    columns=prototype_references if prototype_references else tree_references,
                     index=tree_references
                 ))
                 output_channel.get_storer("df_%d" % index).attrs.meta = {

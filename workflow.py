@@ -66,6 +66,14 @@ def cli(ctx, basepath, workflow_name, step, configuration, start, maximum, json,
               help="Path of representatives to measure distance to.")
 @click.pass_context
 def process_as_vector(ctx, trees, representatives):
+    if len(trees) == 0 and len(representatives) == 0 and ctx.obj.get("use_input", False):
+        structure = ctx.obj.get("structure", None)
+        file_path = structure.input_file_path()
+        with open(file_path, "r") as input_file:
+            # expecting dictionary containing lists for trees and representatives
+            data = json.load(input_file).get("data")
+            trees = data.get("trees", [])
+            representatives = data.get("representatives", [])
     results = _init_results()
     results["files"] = trees
     results["prototypes"] = representatives
@@ -88,7 +96,8 @@ def process_as_vector(ctx, trees, representatives):
         ctx=ctx,
         results=results,
         version=determine_version(os.path.dirname(assess.__file__)),
-        source="%s (%s)" % (__file__, "process_as_vector")
+        source="%s (%s)" % (__file__, "process_as_vector"),
+        file_type=ctx.obj.get("file_type", None)
     )
 
 
@@ -315,6 +324,9 @@ def process_as_matrix(ctx, trees, skip_upper, skip_diagonal, pcount):
                 trees = data.values()[0]
             except AttributeError:
                 trees = data
+            except TypeError:
+                # object is dictionary with trees
+                trees = data.get("trees", [])
     results = _init_results()
     results["files"] = results["prototypes"] = trees[:]
 

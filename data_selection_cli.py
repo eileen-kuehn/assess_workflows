@@ -55,25 +55,32 @@ def _relevant_files_for_context(ctx, path):
 
 
 @click.command()
-@click.option("--paths", "paths", multiple=True, required=True)
+@click.option("--trees", "trees", type=click.Path(), multiple=True,
+              help="Path of trees to consider for distance measurement.")
+@click.option("--representatives", "representatives", type=click.Path(), multiple=True,
+              help="Path of representatives to measure distance to.")
 @click.option("--pcount", "pcount", type=int, default=1)
 @click.pass_context
-def index_valid_hdf_trees(ctx, paths, pcount):
+def index_valid_hdf_trees(ctx, trees, representatives, pcount):
     structure = ctx.obj.get("structure", None)
-    results = []
+    results = {}
+    paths = [(key, value) for key, values in {
+        "trees": trees,
+        "representatives": representatives
+    }.items() for value in values if values]
     if pcount > 1:
         trees = do_multicore(
             count=pcount,
             target=_valid_hdf_tree,
             data=paths
         )
-        for tree, name in trees:
-            results.append(_write_tree_to_pkl(structure, tree, name))
+        for category, tree, name in trees:
+            results.setdefault(category, []).append(_write_tree_to_pkl(structure, tree, name))
     else:
         for filename in paths:
             trees = _valid_hdf_tree(filename)
-            for tree, name in trees:
-                results.append(_write_tree_to_pkl(structure, tree, name))
+            for category, tree, name in trees:
+                results.setdefault(category, []).append(_write_tree_to_pkl(structure, tree, name))
     output_results(
         ctx=ctx,
         results=results,
@@ -89,7 +96,12 @@ def _write_tree_to_pkl(structure, tree, name):
     return pkl_filename
 
 
-def _valid_hdf_tree(filename):
+def _valid_hdf_tree(args):
+    """
+    :param args: Tuple from category and file path
+    :return: Tuple from category, tree, and tree name
+    """
+    category, filename = args
     results = []
     df = pd.read_hdf(filename, key="train_events")
     label = df.index.levels[0][0]
@@ -119,7 +131,7 @@ def _valid_hdf_tree(filename):
                 )
             last_node = node
         if tree:
-            results.append((tree, event,))
+            results.append((category, tree, event,))
     return results
 
 
