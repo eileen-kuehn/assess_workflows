@@ -203,23 +203,22 @@ def _batch_process_as_vector(kwargs):
     :return:
     """
     def path_generator():
-        for path in prototypes:
-            yield (path, 1)
+        for path in files:
+            yield (path, len(prototypes))
 
-    with ExceptionFrame():
-        files = kwargs.get("files", None)
-        prototypes = kwargs.get("prototypes", None)
-        configurations = kwargs.get("configurations", None)
-        key = kwargs.get("key", None)
-        result = _init_results()
-        result["files"] = files
-        result["prototypes"] = prototypes
-        result["results"] = _process_configurations(
-            prototypes=_initialise_prototypes(files),
-            configurations=configurations,
-            event_generator=path_generator
-        )
-        result["key"] = key
+    files = kwargs.get("files", None)
+    prototypes = kwargs.get("prototypes", None)
+    configurations = kwargs.get("configurations", None)
+    key = kwargs.get("key", None)
+    result = _init_results()
+    result["files"] = files
+    result["prototypes"] = prototypes
+    result["results"] = _process_configurations(
+        prototypes=_initialise_prototypes(prototypes),
+        configurations=configurations,
+        event_generator=path_generator
+    )
+    result["key"] = key
     return result
 
 
@@ -235,21 +234,77 @@ def batch_process_as_vector(ctx, pcount):
         with open(file_path, "r") as input_file:
             input_data = json.load(input_file).get("data")
             data = []
-            for key, values in input_data.items():
-                for value in values:
-                    if len(value) == 1:
-                        # element is file and prototype at the same time
-                        value.append(value[0])
-                    data.append({
-                        "configurations": ctx.obj["configurations"],
-                        "files": value[:1],
-                        "prototypes": value[1:],
-                        "key": key
-                    })
+            if "trees" in input_data and "representatives" in input_data:
+                trees = input_data.get("trees", [])
+                prototypes = input_data.get("representatives", [])
+                if len(trees) >= len(prototypes):
+                    for tree in trees:
+                        data.append({
+                            "configurations": ctx.obj["configurations"],
+                            "files": [tree],
+                            "prototypes": prototypes
+                        })
+                else:
+                    for prototype in prototypes:
+                        data.append({
+                            "configurations": ctx.obj["configurations"],
+                            "files": trees,
+                            "prototypes": [prototype]
+                        })
+            else:
+                for key, values in input_data.items():
+                    for value in values:
+                        if len(value) == 1:
+                            # element is file and prototype at the same time
+                            value.append(value[0])
+                        data.append({
+                            "configurations": ctx.obj["configurations"],
+                            "files": value[:1],
+                            "prototypes": value[1:],
+                            "key": key
+                        })
             if pcount > 1:
-                values = do_multicore(pcount, _batch_process_as_vector, data)
-                for value in values:
-                    results.append(value)
+                final_decorators = []
+                row_idx = col_idx = -1
+                result_list = do_multicore(pcount, _batch_process_as_vector, data)
+                for result_entry in result_list:
+                    if len(trees) >= len(prototypes):
+                        row_idx += 1
+                        if col_idx < 0:
+                            col_idx = 0
+                    else:
+                        col_idx += 1
+                        if row_idx < 0:
+                            row_idx = 0
+                    current_results = result_entry.get("results", [])
+                    for decorator_key in current_results[0].get("decorator", {}):
+                        for index, current_result in enumerate(current_results):
+                            try:
+                                # if decorator already exists, we only need to add current data
+                                decorator = final_decorators[index][decorator_key]
+                                current_decorator = type(decorator)()
+                                current_decorator._data = current_result.get("decorator", {})[decorator_key]
+                                current_decorator.row_idx = [row_idx]
+                                current_decorator.col_idx = [col_idx]
+                                decorator += current_decorator
+                            except IndexError:
+                                # if decorator does not exist, we load it and will later add data
+                                decorator = Decorator.from_name(decorator_key)
+                                decorator._data = current_result.get("decorator", {})[decorator_key]
+                                decorator.row_idx = [row_idx]
+                                decorator.col_idx = [col_idx]
+                                try:
+                                    final_decorators[index].setdefault(decorator_key, decorator)
+                                except IndexError:
+                                    final_decorators.append({decorator_key: decorator})
+                finals = result_list[0]
+                finals["files"] = trees
+                finals["prototypes"] = prototypes
+                for index, final in enumerate(finals.get("results", [])):
+                    for value in final_decorators[index].values():
+                        data = value.descriptive_data()
+                        final.get("decorator", {})[list(data.keys())[0]] = list(data.values())[0]
+                results.append(finals)
             else:
                 for elem in data:
                     results.append(_batch_process_as_vector(elem))
@@ -258,7 +313,8 @@ def batch_process_as_vector(ctx, pcount):
         ctx=ctx,
         results=results,
         version=determine_version(os.path.dirname(assess.__file__)),
-        source="%s (%s)" % (__file__, "batch_process_as_vector")
+        source="%s (%s)" % (__file__, "batch_process_as_vector"),
+        file_type=ctx.obj.get("file_type", None)
     )
 
 

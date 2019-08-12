@@ -63,32 +63,36 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
             }
             print(json.dumps(dump, indent=2), file=output_channel)
         elif format_hdf:
-            tree_references = [os.path.basename(name).split(
-                ".")[0] for name in results.get("files", [])]
-            # check for representatives
-            prototype_references = [os.path.basename(name).split(
-                ".")[0] for name in results.get("prototypes", [])]
-            for index, result in enumerate(results.get("results")):
-                data = []
-                if not isinstance(result, dict):
-                    result = result[0]
-                # assuming one matrix decorator per result
-                matrix = result.get("decorator").get("matrix")
-                for row in matrix:
-                    data.append(row[0])
-                output_channel.put("df_%d" % index, pd.DataFrame(
-                    np.array(data),
-                    columns=prototype_references if prototype_references else tree_references,
-                    index=tree_references
-                ))
-                output_channel.get_storer("df_%d" % index).attrs.meta = {
-                    "algorithm": result.get("algorithm", None),
-                    "signature": result.get("signature", None),
-                    "event_streamer": result.get("event_streamer", None),
-                    "date": "%s" % datetime.datetime.now(),
-                    "source": "%s" % source if source else "unknown",
-                    "version": "%s" % version if version else "unknown"
-                }
+            if isinstance(results, dict):  # also deal with matrix data
+                results = [results]
+            for single_result in results:
+                tree_references = [os.path.basename(name).split(
+                    ".")[0] for name in single_result.get("files", [])]
+                # check for representatives
+                prototype_references = [os.path.basename(name).split(
+                    ".")[0] for name in single_result.get("prototypes", [])]
+                for index, result in enumerate(single_result.get("results")):
+                    print("single result", result)
+                    data = []
+                    if not isinstance(result, dict):
+                        result = result[0]
+                    # assuming one matrix decorator per result
+                    matrix = result.get("decorator").get("matrix")
+                    for row in matrix:
+                        data.append(row[0])
+                    output_channel.put("df_%d" % index, pd.DataFrame(
+                        np.array(data),
+                        columns=prototype_references if prototype_references else tree_references,
+                        index=tree_references
+                    ))
+                    output_channel.get_storer("df_%d" % index).attrs.meta = {
+                        "algorithm": result.get("algorithm", None),
+                        "signature": result.get("signature", None),
+                        "event_streamer": result.get("event_streamer", None),
+                        "date": "%s" % datetime.datetime.now(),
+                        "source": "%s" % source if source else "unknown",
+                        "version": "%s" % version if version else "unknown"
+                    }
         else:
             print("%s date: %s" % (comment_sign, datetime.datetime.now()), file=output_channel)
             print("%s source: %s" % (comment_sign, source if source else "unknown"), file=output_channel)
