@@ -63,10 +63,10 @@ def output_results(ctx, results=None, version=None, source=None, variant=None, f
             }
             print(json.dumps(dump, indent=2), file=output_channel)
         elif format_hdf:
-            tree_references = [os.path.basename(name).split("-")[-1].split(
+            tree_references = [os.path.basename(name).split(
                 ".")[0] for name in results.get("files", [])]
             # check for representatives
-            prototype_references = [os.path.basename(name).split("-")[-1].split(
+            prototype_references = [os.path.basename(name).split(
                 ".")[0] for name in results.get("prototypes", [])]
             for index, result in enumerate(results.get("results")):
                 data = []
