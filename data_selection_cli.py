@@ -131,7 +131,8 @@ def _valid_hdf_tree(args):
                 )
             last_node = node
         if tree:
-            results.append((category, tree, event,))
+            results.append((category, tree, "%s-%s" % (
+                os.path.basename(filename).split(".")[0], event),))
     return results
 
 
