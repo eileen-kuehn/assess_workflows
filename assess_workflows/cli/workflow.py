@@ -10,7 +10,7 @@ import pickle
 from assess.clustering.clusterdistance import ClusterDistance
 from assess.exceptions.exceptions import EventNotSupportedException
 from assess_workflows.utils.multicoreresult import multicore_factor
-from clustering_cli import _create_graph
+from assess_workflows.cli.clustering_cli import _create_graph
 from dengraph.dengraph import DenGraphIO
 
 import assess
