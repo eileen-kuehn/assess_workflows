@@ -17,53 +17,61 @@ class Structure(object):
 
     @staticmethod
     def data_generation_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "data_generation_cli.py")
+        return os.path.join(os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli", "data_generation_cli.py")
 
     @staticmethod
     def gnm_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "gnm_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "gnm_cli.py")
 
     @staticmethod
     def r_analysis_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "r_analysis_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "r_analysis_cli.py")
 
     @staticmethod
     def analysis_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "analysis_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "analysis_cli.py")
 
     @staticmethod
     def workflow_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "workflow.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "workflow.py")
 
     @staticmethod
     def generic_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "generic_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "generic_cli.py")
 
     @staticmethod
     def data_selection_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "data_selection_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "data_selection_cli.py")
 
     @staticmethod
     def r_workflow_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "r_workflow_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "r_workflow_cli.py")
 
     @staticmethod
     def transformation_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "transformation_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "transformation_cli.py")
 
     @staticmethod
     def clustering_cli():
-        return os.path.join(os.path.join(os.path.dirname(
-            os.path.realpath(assess_workflows.__file__)), os.pardir), "clustering_cli.py")
+        return os.path.join(
+            os.path.dirname(os.path.realpath(assess_workflows.__file__)), "cli",
+            "clustering_cli.py")
 
     def input_path(self, name=None):
         return self._get_folder_path(self.workflow_path(name or self.name), "input")
