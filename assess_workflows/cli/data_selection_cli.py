@@ -104,8 +104,8 @@ def _valid_hdf_tree(args):
     category, filename = args
     results = []
     df = pd.read_hdf(filename, key="train_events")
-    label = df.index.levels[0][0]
-    events = df.index.levels[1]
+    label = df.index.get_level_values(0)[0]
+    events = df.index.get_level_values(1).unique()
     for event in events:
         tree_data = df.xs((label, event), level=('label', 'evtNum'))
         tree = Prototype()
